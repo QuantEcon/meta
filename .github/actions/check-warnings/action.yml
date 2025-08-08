@@ -1,0 +1,124 @@
+name: 'Check for Python Warnings'
+description: 'Scan HTML files for Python warnings and fail if found'
+author: 'QuantEcon'
+
+inputs:
+  html-path:
+    description: 'Path to directory containing HTML files to scan'
+    required: false
+    default: '.'
+  warnings:
+    description: 'Comma-separated list of warnings to check for'
+    required: false
+    default: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+  fail-on-warning:
+    description: 'Whether to fail the workflow if warnings are found'
+    required: false
+    default: 'true'
+
+outputs:
+  warnings-found:
+    description: 'Whether warnings were found (true/false)'
+    value: ${{ steps.check.outputs.warnings-found }}
+  warning-count:
+    description: 'Number of warnings found'
+    value: ${{ steps.check.outputs.warning-count }}
+  warning-details:
+    description: 'Details of warnings found'
+    value: ${{ steps.check.outputs.warning-details }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check for warnings
+      id: check
+      shell: bash
+      run: |
+        # Parse inputs
+        HTML_PATH="${{ inputs.html-path }}"
+        WARNINGS="${{ inputs.warnings }}"
+        FAIL_ON_WARNING="${{ inputs.fail-on-warning }}"
+        
+        echo "Scanning HTML files in: $HTML_PATH"
+        echo "Looking for warnings: $WARNINGS"
+        
+        # Convert comma-separated warnings to array
+        IFS=',' read -ra WARNING_ARRAY <<< "$WARNINGS"
+        
+        # Initialize counters
+        TOTAL_WARNINGS=0
+        WARNING_DETAILS=""
+        WARNINGS_FOUND="false"
+        
+        # Find all HTML files
+        if [ ! -e "$HTML_PATH" ]; then
+          echo "Error: HTML path '$HTML_PATH' does not exist"
+          exit 1
+        fi
+        
+        # Determine if we're dealing with a file or directory
+        if [ -f "$HTML_PATH" ]; then
+          # Single file
+          if [[ "$HTML_PATH" == *.html ]]; then
+            echo "Checking single HTML file: $HTML_PATH"
+            FILES=("$HTML_PATH")
+          else
+            echo "Error: '$HTML_PATH' is not an HTML file"
+            exit 1
+          fi
+        else
+          # Directory - find all HTML files
+          mapfile -d '' FILES < <(find "$HTML_PATH" -name "*.html" -type f -print0)
+        fi
+        
+        # Search for warnings in HTML files
+        for file in "${FILES[@]}"; do
+          echo "Checking file: $file"
+          
+          for warning in "${WARNING_ARRAY[@]}"; do
+            # Remove leading/trailing whitespace from warning
+            warning=$(echo "$warning" | xargs)
+            
+            # Search for the warning in the file
+            matches=$(grep -n "$warning" "$file" 2>/dev/null || true)
+            
+            if [ -n "$matches" ]; then
+              WARNINGS_FOUND="true"
+              count=$(echo "$matches" | wc -l)
+              TOTAL_WARNINGS=$((TOTAL_WARNINGS + count))
+              
+              echo "⚠️  Found $count instance(s) of '$warning' in $file:"
+              echo "$matches"
+              
+              # Add to details
+              if [ -n "$WARNING_DETAILS" ]; then
+                WARNING_DETAILS="$WARNING_DETAILS\n"
+              fi
+              WARNING_DETAILS="$WARNING_DETAILS$file: $count instance(s) of '$warning'"
+            fi
+          done
+        done
+        
+        # Set outputs
+        echo "warnings-found=$WARNINGS_FOUND" >> $GITHUB_OUTPUT
+        echo "warning-count=$TOTAL_WARNINGS" >> $GITHUB_OUTPUT
+        echo "warning-details<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$WARNING_DETAILS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Summary
+        if [ "$WARNINGS_FOUND" = "true" ]; then
+          echo "❌ Found $TOTAL_WARNINGS warning(s) in HTML files"
+          echo "::error::Found $TOTAL_WARNINGS Python warning(s) in HTML output"
+          
+          if [ "$FAIL_ON_WARNING" = "true" ]; then
+            echo "Failing workflow due to warnings found"
+            exit 1
+          fi
+        else
+          echo "✅ No warnings found in HTML files"
+        fi
+
+branding:
+  icon: 'alert-triangle'
+  color: 'orange'

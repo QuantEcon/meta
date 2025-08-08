@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Code Output with Warnings</title>
+</head>
+<body>
+    <h1>Test Output with Warnings</h1>
+    <div class="output">
+        <pre>
+Running code...
+/path/to/file.py:15: DeprecationWarning: This function is deprecated
+  result = old_function()
+/path/to/file.py:25: SyntaxWarning: invalid escape sequence '\d'
+  pattern = '\d+'
+Result: 42
+        </pre>
+    </div>
+    <div class="another-output">
+        <pre>
+Another execution...
+/path/to/another.py:10: FutureWarning: This will change in future versions
+  new_behavior = True
+Done!
+        </pre>
+    </div>
+</body>
+</html>
