@@ -94,6 +94,54 @@ runs:
           mapfile -d '' FILES < <(find "$HTML_PATH" -name "*.html" -type f -print0)
         fi
         
+        # Create temporary Python script for parsing HTML
+        echo 'import re' > /tmp/check_warnings.py
+        echo 'import sys' >> /tmp/check_warnings.py
+        echo 'import os' >> /tmp/check_warnings.py
+        echo '' >> /tmp/check_warnings.py
+        echo 'def find_warnings_in_cell_outputs(file_path, warning_text):' >> /tmp/check_warnings.py
+        echo '    try:' >> /tmp/check_warnings.py
+        echo '        with open(file_path, "r", encoding="utf-8") as f:' >> /tmp/check_warnings.py
+        echo '            content = f.read()' >> /tmp/check_warnings.py
+        echo '        ' >> /tmp/check_warnings.py
+        echo '        # Find all HTML elements with cell_output in the class attribute' >> /tmp/check_warnings.py
+        echo '        pattern = r"<([^>]+)\s+class=\"[^\"]*cell_output[^\"]*\"[^>]*>(.*?)</\1>"' >> /tmp/check_warnings.py
+        echo '        ' >> /tmp/check_warnings.py
+        echo '        matches = []' >> /tmp/check_warnings.py
+        echo '        ' >> /tmp/check_warnings.py
+        echo '        # Search for cell_output blocks' >> /tmp/check_warnings.py
+        echo '        for match in re.finditer(pattern, content, re.DOTALL | re.IGNORECASE):' >> /tmp/check_warnings.py
+        echo '            block_content = match.group(2)' >> /tmp/check_warnings.py
+        echo '            block_start = match.start()' >> /tmp/check_warnings.py
+        echo '            ' >> /tmp/check_warnings.py
+        echo '            # Count line number where this block starts' >> /tmp/check_warnings.py
+        echo '            block_line = content[:block_start].count("\\n") + 1' >> /tmp/check_warnings.py
+        echo '            ' >> /tmp/check_warnings.py
+        echo '            # Search for warning within this block' >> /tmp/check_warnings.py
+        echo '            if warning_text in block_content:' >> /tmp/check_warnings.py
+        echo '                # Find specific lines within the block that contain the warning' >> /tmp/check_warnings.py
+        echo '                block_lines = block_content.split("\\n")' >> /tmp/check_warnings.py
+        echo '                for i, line in enumerate(block_lines):' >> /tmp/check_warnings.py
+        echo '                    if warning_text in line:' >> /tmp/check_warnings.py
+        echo '                        actual_line_num = block_line + i' >> /tmp/check_warnings.py
+        echo '                        # Clean up the line for display (remove extra whitespace, HTML tags)' >> /tmp/check_warnings.py
+        echo '                        clean_line = re.sub(r"<[^>]+>", "", line).strip()' >> /tmp/check_warnings.py
+        echo '                        if clean_line:  # Only add non-empty lines' >> /tmp/check_warnings.py
+        echo '                            matches.append(f"{actual_line_num}:{clean_line}")' >> /tmp/check_warnings.py
+        echo '        ' >> /tmp/check_warnings.py
+        echo '        # Output results' >> /tmp/check_warnings.py
+        echo '        for match in matches:' >> /tmp/check_warnings.py
+        echo '            print(match)' >> /tmp/check_warnings.py
+        echo '            ' >> /tmp/check_warnings.py
+        echo '    except Exception as e:' >> /tmp/check_warnings.py
+        echo '        print(f"Error processing file: {e}", file=sys.stderr)' >> /tmp/check_warnings.py
+        echo '        sys.exit(1)' >> /tmp/check_warnings.py
+        echo '' >> /tmp/check_warnings.py
+        echo 'if __name__ == "__main__":' >> /tmp/check_warnings.py
+        echo '    file_path = sys.argv[1]' >> /tmp/check_warnings.py
+        echo '    warning_text = sys.argv[2]' >> /tmp/check_warnings.py
+        echo '    find_warnings_in_cell_outputs(file_path, warning_text)' >> /tmp/check_warnings.py
+        
         # Search for warnings in HTML files within cell_output elements
         for file in "${FILES[@]}"; do
           echo "Checking file: $file"
@@ -101,56 +149,6 @@ runs:
           for warning in "${WARNING_ARRAY[@]}"; do
             # Remove leading/trailing whitespace from warning
             warning=$(echo "$warning" | xargs)
-            
-            # Create temporary Python script for parsing HTML
-            cat > /tmp/check_warnings.py << 'EOF'
-            import re
-            import sys
-            import os
-            
-            def find_warnings_in_cell_outputs(file_path, warning_text):
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                    
-                    # Find all HTML elements with cell_output in the class attribute
-                    pattern = r'<([^>]+)\s+class="[^"]*cell_output[^"]*"[^>]*>(.*?)</\1>'
-                    
-                    matches = []
-                    
-                    # Search for cell_output blocks
-                    for match in re.finditer(pattern, content, re.DOTALL | re.IGNORECASE):
-                        block_content = match.group(2)
-                        block_start = match.start()
-                        
-                        # Count line number where this block starts
-                        block_line = content[:block_start].count('\n') + 1
-                        
-                        # Search for warning within this block
-                        if warning_text in block_content:
-                            # Find specific lines within the block that contain the warning
-                            block_lines = block_content.split('\n')
-                            for i, line in enumerate(block_lines):
-                                if warning_text in line:
-                                    actual_line_num = block_line + i
-                                    # Clean up the line for display (remove extra whitespace, HTML tags)
-                                    clean_line = re.sub(r'<[^>]+>', '', line).strip()
-                                    if clean_line:  # Only add non-empty lines
-                                        matches.append(f'{actual_line_num}:{clean_line}')
-                    
-                    # Output results
-                    for match in matches:
-                        print(match)
-                        
-                except Exception as e:
-                    print(f'Error processing file: {e}', file=sys.stderr)
-                    sys.exit(1)
-            
-            if __name__ == "__main__":
-                file_path = sys.argv[1]
-                warning_text = sys.argv[2]
-                find_warnings_in_cell_outputs(file_path, warning_text)
-            EOF
             
             # Run the Python script and capture results
             matches=$(python3 /tmp/check_warnings.py "$file" "$warning" 2>/dev/null || true)
@@ -212,23 +210,23 @@ runs:
         CURRENT_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
         
         # Create the report file
-        cat > "$ARTIFACT_FILE" << EOF
-        # Python Warning Report
-        
-        **Date:** $CURRENT_DATE
-        **Repository:** ${{ github.repository }}
-        **Workflow:** ${{ github.workflow }}
-        **Run ID:** ${{ github.run_id }}
-        **Total Warnings Found:** ${{ steps.check.outputs.warning-count }}
-        
-        ---
-        
-        ${{ steps.check.outputs.detailed-report }}
-        
-        ---
-        
-        Generated by [Check for Python Warnings Action](https://github.com/QuantEcon/meta/.github/actions/check-warnings)
-        EOF
+        {
+          echo "# Python Warning Report"
+          echo ""
+          echo "**Date:** $CURRENT_DATE"
+          echo "**Repository:** ${{ github.repository }}"
+          echo "**Workflow:** ${{ github.workflow }}"
+          echo "**Run ID:** ${{ github.run_id }}"
+          echo "**Total Warnings Found:** ${{ steps.check.outputs.warning-count }}"
+          echo ""
+          echo "---"
+          echo ""
+          echo "${{ steps.check.outputs.detailed-report }}"
+          echo ""
+          echo "---"
+          echo ""
+          echo "Generated by [Check for Python Warnings Action](https://github.com/QuantEcon/meta/.github/actions/check-warnings)"
+        } > "$ARTIFACT_FILE"
         
         echo "artifact-path=$ARTIFACT_FILE" >> $GITHUB_OUTPUT
         echo "Created warning report artifact: $ARTIFACT_FILE"
