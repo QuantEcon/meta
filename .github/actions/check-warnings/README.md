@@ -2,9 +2,12 @@
 
 This GitHub Action scans HTML files for Python warnings and optionally fails the workflow if any are found. It's designed to be used after building documentation or running code that generates HTML output, to ensure that no warnings are present in the final output.
 
+**Important:** This action specifically targets warnings found within code cell outputs (elements with `cell_output` class) to avoid false positives from warnings mentioned in text content.
+
 ## Features
 
-- Scans HTML files for configurable Python warnings
+- Scans HTML files for configurable Python warnings **within code cell outputs only**
+- Prevents false positives by only checking warnings in `cell_output` HTML elements
 - Supports multiple warning types (SyntaxWarning, DeprecationWarning, FutureWarning)
 - Provides detailed output about warnings found
 - Optionally fails the workflow when warnings are detected
@@ -112,6 +115,31 @@ You can enable both issue creation and artifact generation simultaneously:
     create-issue: 'true'      # Create issue for tracking
     create-artifact: 'true'   # Create artifact for detailed review
 ```
+
+## How It Works
+
+This action specifically searches for Python warnings within HTML elements that have `cell_output` in their class attribute. This approach prevents false positives that would occur if warnings like "FutureWarning" or "DeprecationWarning" are mentioned in the text content of documentation pages.
+
+### Example HTML Structure
+
+The action will detect warnings in this structure:
+```html
+<div class="cell_output">
+    <pre>
+    /path/to/file.py:10: FutureWarning: This feature will be deprecated
+      result = old_function()
+    </pre>
+</div>
+```
+
+But will **ignore** warnings mentioned in regular content:
+```html
+<div class="content">
+    <p>In this tutorial, we'll discuss FutureWarning messages.</p>
+</div>
+```
+
+This ensures that educational content about warnings doesn't trigger false positives in the check.
 
 ## Permissions
 

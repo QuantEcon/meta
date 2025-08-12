@@ -1,5 +1,5 @@
 name: 'Check for Python Warnings'
-description: 'Scan HTML files for Python warnings and fail if found'
+description: 'Scan HTML files for Python warnings within code cell outputs (avoiding false positives from text content)'
 author: 'QuantEcon'
 
 inputs:
@@ -94,7 +94,7 @@ runs:
           mapfile -d '' FILES < <(find "$HTML_PATH" -name "*.html" -type f -print0)
         fi
         
-        # Search for warnings in HTML files
+        # Search for warnings in HTML files within cell_output elements
         for file in "${FILES[@]}"; do
           echo "Checking file: $file"
           
@@ -102,8 +102,105 @@ runs:
             # Remove leading/trailing whitespace from warning
             warning=$(echo "$warning" | xargs)
             
-            # Search for the warning in the file
-            matches=$(grep -n "$warning" "$file" 2>/dev/null || true)
+            # Create a temporary Python script to parse HTML and search within cell_output elements
+            python3 << EOF > /tmp/search_results.txt
+import re
+import sys
+
+def find_warnings_in_cell_outputs(file_path, warning_text):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Find all HTML elements with cell_output in the class attribute
+        # This regex looks for opening tags with class containing cell_output
+        # and captures content until the matching closing tag
+        pattern = r'<([^>]+)\s+class="[^"]*cell_output[^"]*"[^>]*>(.*?)</\1>'
+        
+        matches = []
+        line_number = 1
+        
+        # Split content into lines for line number tracking
+        lines = content.split('\n')
+        
+        # Search for cell_output blocks
+        for match in re.finditer(pattern, content, re.DOTALL | re.IGNORECASE):
+            block_content = match.group(2)
+            block_start = match.start()
+            
+            # Count line number where this block starts
+            block_line = content[:block_start].count('\n') + 1
+            
+            # Search for warning within this block
+            if warning_text in block_content:
+                # Find specific lines within the block that contain the warning
+                block_lines = block_content.split('\n')
+                for i, line in enumerate(block_lines):
+                    if warning_text in line:
+                        actual_line_num = block_line + i
+                        # Clean up the line for display (remove extra whitespace, HTML tags)
+                        clean_line = re.sub(r'<[^>]+>', '', line).strip()
+                        if clean_line:  # Only add non-empty lines
+                            matches.append(f"{actual_line_num}:{clean_line}")
+        
+        # Output results
+        for match in matches:
+            print(match)
+            
+    except Exception as e:
+        print(f"Error processing file: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    find_warnings_in_cell_outputs("$file", "$warning")
+EOF
+            
+            # Run the Python script and capture results
+            matches=$(python3 -c "
+import re
+import sys
+
+def find_warnings_in_cell_outputs(file_path, warning_text):
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Find all HTML elements with cell_output in the class attribute
+        # This regex looks for opening tags with class containing cell_output
+        pattern = r'<([^>]+)\s+class=\"[^\"]*cell_output[^\"]*\"[^>]*>(.*?)</\1>'
+        
+        matches = []
+        
+        # Search for cell_output blocks
+        for match in re.finditer(pattern, content, re.DOTALL | re.IGNORECASE):
+            block_content = match.group(2)
+            block_start = match.start()
+            
+            # Count line number where this block starts
+            block_line = content[:block_start].count('\n') + 1
+            
+            # Search for warning within this block
+            if warning_text in block_content:
+                # Find specific lines within the block that contain the warning
+                block_lines = block_content.split('\n')
+                for i, line in enumerate(block_lines):
+                    if warning_text in line:
+                        actual_line_num = block_line + i
+                        # Clean up the line for display (remove extra whitespace, HTML tags)
+                        clean_line = re.sub(r'<[^>]+>', '', line).strip()
+                        if clean_line:  # Only add non-empty lines
+                            matches.append(f'{actual_line_num}:{clean_line}')
+        
+        # Output results
+        for match in matches:
+            print(match)
+            
+    except Exception as e:
+        print(f'Error processing file: {e}', file=sys.stderr)
+        sys.exit(1)
+
+find_warnings_in_cell_outputs('$file', '$warning')
+" 2>/dev/null || true)
             
             if [ -n "$matches" ]; then
               WARNINGS_FOUND="true"
