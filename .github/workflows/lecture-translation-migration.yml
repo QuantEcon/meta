@@ -1,0 +1,101 @@
+name: Lecture Translation Migration
+
+on:
+  repository_dispatch:
+    types: [pr-opened, pr-synchronized]
+  workflow_dispatch:
+    inputs:
+      source_repo:
+        description: 'Source repository (e.g., QuantEcon/lecture-python.myst)'
+        required: true
+        default: 'QuantEcon/lecture-python.myst'
+      pr_number:
+        description: 'PR number in source repository'
+        required: true
+        type: number
+      target_repo:
+        description: 'Target repository (e.g., QuantEcon/lecture-python.zh-cn)'
+        required: true
+        default: 'QuantEcon/lecture-python.zh-cn'
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  TRANSLATION_REVIEWER: nisha617
+
+jobs:
+  check-translation-status:
+    runs-on: ubuntu-latest
+    outputs:
+      translated-files: ${{ steps.check.outputs.translated-files }}
+      should-proceed: ${{ steps.check.outputs.should-proceed }}
+    steps:
+    - name: Checkout meta repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install requests PyYAML openai gitpython
+
+    - name: Get PR details and check translation status
+      id: check
+      run: |
+        python scripts/check_translation_status.py \
+          --source-repo "${{ github.event.client_payload.repository || inputs.source_repo }}" \
+          --pr-number "${{ github.event.client_payload.pr_number || inputs.pr_number }}" \
+          --target-repo "${{ github.event.client_payload.target_repo || inputs.target_repo }}"
+
+  create-translation-pr:
+    needs: check-translation-status
+    if: needs.check-translation-status.outputs.should-proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout meta repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install requests PyYAML openai gitpython diff-match-patch
+
+    - name: Create translation PR
+      run: |
+        python scripts/create_translation_pr.py \
+          --source-repo "${{ github.event.client_payload.repository || inputs.source_repo }}" \
+          --pr-number "${{ github.event.client_payload.pr_number || inputs.pr_number }}" \
+          --target-repo "${{ github.event.client_payload.target_repo || inputs.target_repo }}" \
+          --translated-files '${{ needs.check-translation-status.outputs.translated-files }}'
+
+  create-fallback-issue:
+    needs: [check-translation-status, create-translation-pr]
+    if: always() && (needs.check-translation-status.outputs.should-proceed == 'false' || failure())
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout meta repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        pip install requests PyYAML
+
+    - name: Create fallback issue
+      run: |
+        python scripts/create_fallback_issue.py \
+          --source-repo "${{ github.event.client_payload.repository || inputs.source_repo }}" \
+          --pr-number "${{ github.event.client_payload.pr_number || inputs.pr_number }}" \
+          --target-repo "${{ github.event.client_payload.target_repo || inputs.target_repo }}" \
+          --reason "${{ needs.create-translation-pr.result }}"
