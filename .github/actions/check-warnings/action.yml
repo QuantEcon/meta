@@ -246,35 +246,37 @@ runs:
       with:
         script: |
           const warningCount = '${{ steps.check.outputs.warning-count }}';
-          const detailedReport = `${{ steps.check.outputs.detailed-report }}`;
+          const detailedReport = ${{ toJSON(steps.check.outputs.detailed-report) }};
           const title = '${{ inputs.issue-title }}';
           
-          const body = `# Python Warnings Detected
-          
-          🚨 **${{ steps.check.outputs.warning-count }} Python warning(s)** were found in the HTML output during the documentation build.
-          
-          **Details:**
-          - **Repository:** ${{ github.repository }}
-          - **Workflow:** ${{ github.workflow }}
-          - **Run ID:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-          - **Commit:** ${{ github.sha }}
-          - **Branch:** ${{ github.ref_name }}
-          - **Date:** ${new Date().toISOString()}
-          
-          ---
-          
-          ${detailedReport}
-          
-          ---
-          
-          **Next Steps:**
-          1. Review the warnings listed above
-          2. Fix the underlying code that's generating these warnings
-          3. Re-run the build to verify the warnings are resolved
-          
-          **Note:** This issue was automatically created by the [Check for Python Warnings Action](https://github.com/QuantEcon/meta/.github/actions/check-warnings).
-          
-          Please close this issue once all warnings have been addressed.`;
+          const body = [
+            '# Python Warnings Detected',
+            '',
+            '🚨 **' + warningCount + ' Python warning(s)** were found in the HTML output during the documentation build.',
+            '',
+            '**Details:**',
+            '- **Repository:** ${{ github.repository }}',
+            '- **Workflow:** ${{ github.workflow }}',
+            '- **Run ID:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})',
+            '- **Commit:** ${{ github.sha }}',
+            '- **Branch:** ${{ github.ref_name }}',
+            '- **Date:** ' + new Date().toISOString(),
+            '',
+            '---',
+            '',
+            detailedReport,
+            '',
+            '---',
+            '',
+            '**Next Steps:**',
+            '1. Review the warnings listed above',
+            '2. Fix the underlying code that\'s generating these warnings',
+            '3. Re-run the build to verify the warnings are resolved',
+            '',
+            '**Note:** This issue was automatically created by the [Check for Python Warnings Action](https://github.com/QuantEcon/meta/.github/actions/check-warnings).',
+            '',
+            'Please close this issue once all warnings have been addressed.'
+          ].join('\n');
           
           try {
             const response = await github.rest.issues.create({
@@ -286,13 +288,13 @@ runs:
             });
             
             const issueUrl = response.data.html_url;
-            console.log(`Created issue: ${issueUrl}`);
+            console.log('Created issue: ' + issueUrl);
             core.setOutput('issue-url', issueUrl);
             
             return issueUrl;
           } catch (error) {
             console.error('Failed to create issue:', error);
-            core.setFailed(`Failed to create issue: ${error.message}`);
+            core.setFailed('Failed to create issue: ' + error.message);
           }
 
 branding:
