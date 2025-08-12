@@ -43,7 +43,133 @@ jobs:
         fail-on-warning: 'true'
 ```
 
-## Example 2: Non-failing Check with Reporting
+## Example 2: Non-failing Check with GitHub Issue Creation
+
+```yaml
+name: Build with Issue Creation
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-with-issue-creation:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Build documentation
+      run: |
+        # Your build process here
+        make html
+    
+    - name: Check for warnings with issue creation
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './docs/_build/html'
+        fail-on-warning: 'false'
+        create-issue: 'true'
+        issue-title: 'Python Warnings Found in Documentation'
+```
+
+## Example 3: Check with Artifact Generation
+
+```yaml
+name: Build with Artifact Report
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-with-artifact:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Build documentation
+      run: |
+        jupyter-book build .
+    
+    - name: Check for warnings with artifact
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './_build/html'
+        fail-on-warning: 'true'
+        create-artifact: 'true'
+        artifact-name: 'pr-warning-report'
+```
+
+## Example 4: Comprehensive Warning Management
+
+```yaml
+name: Complete Warning Management
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  comprehensive-warning-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        pip install jupyter-book
+        pip install -r requirements.txt
+    
+    - name: Build Jupyter Book
+      run: |
+        jupyter-book build .
+    
+    - name: Comprehensive warning check
+      id: warning-check
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './_build/html'
+        warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning,UserWarning'
+        fail-on-warning: 'false'  # Don't fail on warnings
+        create-issue: ${{ github.event_name == 'push' }}  # Create issues only on push to main
+        issue-title: 'Python Warnings in Documentation Build - ${{ github.sha }}'
+        create-artifact: 'true'   # Always create artifact for review
+        artifact-name: 'warning-report-${{ github.run_id }}'
+    
+    - name: Comment on PR with warning info
+      if: github.event_name == 'pull_request' && steps.warning-check.outputs.warnings-found == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const warningCount = '${{ steps.warning-check.outputs.warning-count }}';
+          const artifactName = 'warning-report-${{ github.run_id }}';
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: `⚠️ **Warning:** Found ${warningCount} Python warning(s) in the documentation build.
+            
+            Please review the [warning report artifact](${context.payload.repository.html_url}/actions/runs/${{ github.run_id }}) for details.
+            
+            Consider fixing these warnings before merging to maintain code quality.`
+          })
+```
+
+## Example 5: Non-failing Check with Reporting
 
 ```yaml
 name: Build with Warning Report
@@ -94,7 +220,7 @@ jobs:
           })
 ```
 
-## Example 3: Custom Warning Types
+## Example 6: Custom Warning Types
 
 ```yaml
 name: Check for Custom Warnings
@@ -128,7 +254,7 @@ jobs:
         fail-on-warning: 'true'
 ```
 
-## Example 4: Matrix Strategy
+## Example 7: Matrix Strategy
 
 ```yaml
 name: Multi-version Warning Check
