@@ -382,7 +382,7 @@ runs:
       uses: actions/github-script@v7
       with:
         script: |
-          const warningDetails = '${{ steps.check.outputs.warning-details }}';
+          const warningDetails = ${{ toJSON(steps.check.outputs.warning-details) }};
           const issueUrl = '${{ steps.create-issue.outputs.issue-url }}';
           
           // Extract file names from warning details
