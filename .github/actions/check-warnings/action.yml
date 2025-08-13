@@ -336,7 +336,7 @@ runs:
               repo: context.repo.repo,
               title: title,
               body: body,
-              labels: ['bug', 'documentation', 'python-warnings']
+              labels: ['bug', 'execution', 'python-warnings']
             });
             
             const issueUrl = response.data.html_url;
