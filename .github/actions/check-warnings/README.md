@@ -13,6 +13,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
 - Optionally fails the workflow when warnings are detected
 - **Creates GitHub issues** with detailed warning reports
 - **Generates workflow artifacts** containing warning reports
+- **Posts PR comments** with warning reports when failing on warnings
 - Configurable search path and warning types
 
 ## Usage
@@ -22,6 +23,17 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
 ```yaml
 - name: Check for Python warnings
   uses: QuantEcon/meta/.github/actions/check-warnings@main
+```
+
+### Advanced Usage with PR Comments
+
+```yaml
+- name: Check for Python warnings with PR feedback
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    fail-on-warning: 'true'  # This will post a comment to the PR if warnings are found
 ```
 
 ### Advanced Usage with Issue Creation
@@ -102,6 +114,17 @@ When `create-artifact` is set to `true`, the action generates a detailed Markdow
 - Timestamp and commit information
 - Downloadable for offline review
 
+### Pull Request Comments
+
+When `fail-on-warning` is set to `true` and warnings are found in a pull request, the action automatically posts a detailed comment to the PR containing:
+
+- Complete warning information formatted for easy reading
+- Direct links to the failing workflow run
+- Suggested next steps for fixing the warnings
+- Repository and commit context
+
+This feature helps developers quickly identify and fix warnings without digging through workflow logs.
+
 ### Using Both Features Together
 
 You can enable both issue creation and artifact generation simultaneously:
@@ -150,9 +173,10 @@ permissions:
   contents: read          # For checking out the repository
   issues: write          # For creating GitHub issues (if create-issue is enabled)
   actions: read          # For creating workflow artifacts (if create-artifact is enabled)
+  pull-requests: write   # For posting PR comments (when fail-on-warning is true in PRs)
 ```
 
-If you're only using the basic warning check functionality, only `contents: read` is required.
+If you're only using the basic warning check functionality, only `contents: read` is required. Add `pull-requests: write` when you want PR comments on warnings.
 
 ## Inputs
 
@@ -193,6 +217,7 @@ permissions:
   contents: read
   issues: write
   actions: read
+  pull-requests: write
 
 jobs:
   build-and-check:
@@ -272,3 +297,8 @@ This action is particularly useful for:
    - Using specific paths rather than scanning entire directories
    - Limiting warning types to only those relevant to your project
    - Setting appropriate artifact retention periods
+
+9. **Pull Request feedback**: When `fail-on-warning` is `true`:
+   - The action automatically posts detailed warning reports as PR comments
+   - This provides immediate feedback to developers without requiring log diving
+   - Requires `pull-requests: write` permission in your workflow
