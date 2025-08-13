@@ -1,0 +1,56 @@
+name: 'Setup QuantEcon Environment'
+description: 'Sets up Python environment with conda and LaTeX for QuantEcon lecture builds'
+inputs:
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.13'
+  environment-file:
+    description: 'Path to conda environment file'
+    required: false
+    default: 'environment.yml'
+  environment-name:
+    description: 'Name of conda environment'
+    required: false
+    default: 'quantecon'
+  install-latex:
+    description: 'Whether to install LaTeX dependencies'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Anaconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        auto-update-conda: true
+        auto-activate-base: true
+        miniconda-version: 'latest'
+        python-version: ${{ inputs.python-version }}
+        environment-file: ${{ inputs.environment-file }}
+        activate-environment: ${{ inputs.environment-name }}
+    
+    - name: Install latex dependencies
+      if: inputs.install-latex == 'true'
+      shell: bash
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get install -y     \
+          texlive-latex-recommended \
+          texlive-latex-extra       \
+          texlive-fonts-recommended \
+          texlive-fonts-extra       \
+          texlive-xetex             \
+          latexmk                   \
+          xindy                     \
+          dvipng                    \
+          cm-super
+    
+    - name: Display Conda Environment Versions
+      shell: bash -l {0}
+      run: conda list
+    
+    - name: Display Pip Versions
+      shell: bash -l {0}
+      run: pip list

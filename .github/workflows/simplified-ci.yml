@@ -1,0 +1,108 @@
+name: Build Project [Simplified with Composite Action]
+on: [pull_request]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      # Use the composite action for setup
+      - name: Setup QuantEcon Environment
+        uses: ./.github/actions/setup-quantecon
+        with:
+          python-version: "3.13"
+          environment-file: environment.yml
+          environment-name: quantecon
+          install-latex: 'true'
+      
+      # Use GitHub's native caching instead of downloading artifacts
+      - name: Cache jupyter-book build
+        uses: actions/cache@v4
+        with:
+          path: _build
+          key: jupyter-book-${{ runner.os }}-${{ hashFiles('lectures/**', 'environment.yml') }}
+          restore-keys: |
+            jupyter-book-${{ runner.os }}-
+      
+      # Build Assets (Download Notebooks and PDF via LaTeX)
+      - name: Build Download Notebooks (sphinx-tojupyter)
+        shell: bash -l {0}
+        run: |
+          jb build lectures --path-output ./ --builder=custom --custom-builder=jupyter -n -W --keep-going
+          mkdir -p _build/html/_notebooks
+          cp -u _build/jupyter/*.ipynb _build/html/_notebooks
+      
+      - name: Build PDF from LaTeX
+        shell: bash -l {0}
+        run: |
+          jb build lectures --builder pdflatex --path-output ./ -n -W --keep-going
+          mkdir -p _build/html/_pdf
+          cp -u _build/latex/*.pdf _build/html/_pdf
+      
+      # Final Build of HTML
+      - name: Build HTML
+        shell: bash -l {0}
+        run: |
+          jb build lectures --path-output ./ -n -W --keep-going
+      
+      - name: Upload Execution Reports
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: execution-reports
+          path: _build/html/reports
+      
+      # Upload built site as artifact for PR previews (GitHub-native alternative to Netlify)
+      - name: Upload PR Preview Artifact
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: pr-preview-${{ github.event.number }}
+          path: '_build/html/'
+          retention-days: 30
+      
+      - name: Comment PR with preview artifact link
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && 
+              comment.body.includes('📖 Preview built and available')
+            );
+            
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `📖 Preview built and available as artifact: [pr-preview-${{ github.event.number }}](${runUrl})
+            
+            To view the preview:
+            1. Click the link above to go to the workflow run
+            2. Download the \`pr-preview-${{ github.event.number }}\` artifact
+            3. Extract and open \`index.html\` in your browser
+            
+            Built with commit ${context.sha}`;
+            
+            if (botComment) {
+              github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: body
+              });
+            } else {
+              github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: body
+              });
+            }

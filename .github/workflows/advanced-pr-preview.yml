@@ -1,0 +1,152 @@
+name: Advanced PR Preview with GitHub Pages
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  pull-requests: write
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    if: github.event.action != 'closed'
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Setup Anaconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          auto-activate-base: true
+          miniconda-version: 'latest'
+          python-version: "3.13"
+          environment-file: environment.yml
+          activate-environment: quantecon
+      
+      - name: Install latex dependencies
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get install -y     \
+            texlive-latex-recommended \
+            texlive-latex-extra       \
+            texlive-fonts-recommended \
+            texlive-fonts-extra       \
+            texlive-xetex             \
+            latexmk                   \
+            xindy                     \
+            dvipng                    \
+            cm-super
+      
+      # Use GitHub's native caching
+      - name: Cache jupyter-book build
+        uses: actions/cache@v4
+        with:
+          path: _build
+          key: jupyter-book-${{ runner.os }}-${{ hashFiles('lectures/**', 'environment.yml') }}
+          restore-keys: |
+            jupyter-book-${{ runner.os }}-
+      
+      # Build the site
+      - name: Build Download Notebooks (sphinx-tojupyter)
+        shell: bash -l {0}
+        run: |
+          jb build lectures --path-output ./ --builder=custom --custom-builder=jupyter -n -W --keep-going
+          mkdir -p _build/html/_notebooks
+          cp -u _build/jupyter/*.ipynb _build/html/_notebooks
+      
+      - name: Build PDF from LaTeX
+        shell: bash -l {0}
+        run: |
+          jb build lectures --builder pdflatex --path-output ./ -n -W --keep-going
+          mkdir -p _build/html/_pdf
+          cp -u _build/latex/*.pdf _build/html/_pdf
+      
+      - name: Build HTML
+        shell: bash -l {0}
+        run: |
+          jb build lectures --path-output ./ -n -W --keep-going
+      
+      # Create PR-specific subdirectory structure for GitHub Pages
+      - name: Prepare PR preview directory
+        run: |
+          mkdir -p preview/pr-${{ github.event.number }}
+          cp -r _build/html/* preview/pr-${{ github.event.number }}/
+          
+          # Create index page that redirects to the PR preview
+          cat > preview/index.html << 'EOF'
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <title>PR Previews</title>
+            <meta http-equiv="refresh" content="0; url=./pr-${{ github.event.number }}/">
+          </head>
+          <body>
+            <p>Redirecting to <a href="./pr-${{ github.event.number }}/">PR #${{ github.event.number }} Preview</a></p>
+          </body>
+          </html>
+          EOF
+      
+      # Upload to a separate repository for PR previews
+      - name: Deploy to preview repository
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.number }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          # Note: This requires a separate repository or branch for previews
+          # Example: quantecon/lecture-previews repository
+          # 
+          # git clone https://github.com/quantecon/lecture-previews.git
+          # cd lecture-previews
+          # rm -rf pr-$PR_NUMBER
+          # cp -r ../preview/pr-$PR_NUMBER .
+          # git add .
+          # git commit -m "Update preview for $REPO_NAME PR #$PR_NUMBER"
+          # git push
+          
+          echo "To implement live URL previews, create a dedicated preview repository"
+          echo "or use the artifact-based approach from modernized-ci.yml"
+      
+      - name: Upload Preview Artifact (Fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-${{ github.event.number }}
+          path: 'preview/pr-${{ github.event.number }}/'
+          retention-days: 30
+      
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `📖 PR Preview Built Successfully!
+            
+            **Option 1: Download Preview**
+            [Download pr-preview-${{ github.event.number }} artifact](${runUrl})
+            
+            **Option 2: Live URL Preview** 
+            To enable live URL previews, set up a dedicated preview repository following the instructions in the workflow comments.
+            
+            Built with commit ${context.sha}`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'closed'
+    steps:
+      - name: Cleanup PR preview
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          echo "PR #$PR_NUMBER closed - cleanup preview if using dedicated preview repository"
+          # Implementation would remove the PR directory from preview repository
