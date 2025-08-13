@@ -47,6 +47,9 @@ jobs:
 
 ```yaml
 name: Build with Issue Creation
+permissions:
+  contents: read
+  issues: write
 
 on:
   push:
@@ -72,6 +75,19 @@ jobs:
         fail-on-warning: 'false'
         create-issue: 'true'
         issue-title: 'Python Warnings Found in Documentation'
+        notify: 'maintainer1,reviewer2'  # Assign to team members
+```
+
+## Example 2b: Issue Creation with Single User Assignment
+
+```yaml
+- name: Check for warnings with single user assignment
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    create-issue: 'true'
+    issue-title: 'Critical Python Warnings Detected'
+    notify: 'team-lead'  # Assign to single responsible person
 ```
 
 ## Example 3: Check with Artifact Generation
@@ -146,6 +162,7 @@ jobs:
         fail-on-warning: 'false'  # Don't fail on warnings
         create-issue: ${{ github.event_name == 'push' }}  # Create issues only on push to main
         issue-title: 'Python Warnings in Documentation Build - ${{ github.sha }}'
+        notify: 'team-lead,maintainer'  # Assign to responsible team members
         create-artifact: 'true'   # Always create artifact for review
         artifact-name: 'warning-report-${{ github.run_id }}'
     

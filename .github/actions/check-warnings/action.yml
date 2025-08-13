@@ -31,6 +31,10 @@ inputs:
     description: 'Name for the workflow artifact containing the warning report'
     required: false
     default: 'warning-report'
+  notify:
+    description: 'GitHub username(s) to assign to the created issue (comma-separated for multiple users)'
+    required: false
+    default: ''
 
 outputs:
   warnings-found:
@@ -295,6 +299,7 @@ runs:
           const warningCount = '${{ steps.check.outputs.warning-count }}';
           const detailedReport = ${{ toJSON(steps.check.outputs.detailed-report) }};
           const title = '${{ inputs.issue-title }}';
+          const notify = '${{ inputs.notify }}';
           
           const body = [
             '# Python Warnings Detected',
@@ -335,8 +340,36 @@ runs:
             });
             
             const issueUrl = response.data.html_url;
+            const issueNumber = response.data.number;
             console.log('Created issue: ' + issueUrl);
             core.setOutput('issue-url', issueUrl);
+            
+            // Assign users to the issue if notify parameter is provided
+            if (notify && notify.trim()) {
+              try {
+                // Parse comma-separated usernames and clean them
+                const assignees = notify.split(',')
+                  .map(username => username.trim())
+                  .filter(username => username.length > 0);
+                
+                if (assignees.length > 0) {
+                  console.log('Assigning issue to users: ' + assignees.join(', '));
+                  
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNumber,
+                    assignees: assignees
+                  });
+                  
+                  console.log('Successfully assigned issue to: ' + assignees.join(', '));
+                }
+              } catch (assignError) {
+                console.error('Failed to assign users to issue:', assignError);
+                // Don't fail the entire workflow for assignment errors
+                console.log('Issue was created successfully, but assignment failed. Users may need to be assigned manually.');
+              }
+            }
             
             return issueUrl;
           } catch (error) {

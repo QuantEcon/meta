@@ -49,6 +49,20 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
     issue-title: 'Python Warnings Found in Documentation Build'
 ```
 
+### Advanced Usage with Issue Creation and User Assignment
+
+```yaml
+- name: Check for Python warnings with assigned issue
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    fail-on-warning: 'false'
+    create-issue: 'true'
+    issue-title: 'Python Warnings Found in Documentation Build'
+    notify: 'username1,username2'  # Assign issue to multiple users
+```
+
 ### Advanced Usage with Artifact Creation
 
 ```yaml
@@ -73,6 +87,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
     fail-on-warning: 'false'
     create-issue: 'true'
     issue-title: 'Python Warnings Detected in Build'
+    notify: 'maintainer1,reviewer2'  # Assign to specific team members
     create-artifact: 'true'
     artifact-name: 'detailed-warning-report'
 ```
@@ -104,6 +119,16 @@ When `create-issue` is set to `true`, the action will automatically create a Git
 - Direct links to the failing workflow run
 - Suggested next steps for resolution
 - Automatic labeling (`bug`, `documentation`, `python-warnings`)
+
+#### Automatic User Assignment
+
+When the `notify` parameter is provided, the created issue will be automatically assigned to the specified GitHub users. This feature supports:
+
+- Single user assignment: `notify: 'username'`
+- Multiple user assignment: `notify: 'user1,user2,user3'`
+- Robust error handling: If assignment fails, the issue is still created successfully
+
+This ensures that the right team members are immediately notified about warnings and can take action to resolve them.
 
 Additionally, when issues are created in pull request contexts, a simple notification comment is posted to the PR thread containing:
 
@@ -196,6 +221,7 @@ If you're only using the basic warning check functionality, only `contents: read
 | `issue-title` | Title for the GitHub issue when warnings are found | No | `Python Warnings Found in Documentation Build` |
 | `create-artifact` | Whether to create a workflow artifact with the warning report | No | `false` |
 | `artifact-name` | Name for the workflow artifact containing the warning report | No | `warning-report` |
+| `notify` | GitHub username(s) to assign to the created issue (comma-separated for multiple users) | No | `` |
 
 ## Outputs
 
@@ -253,6 +279,7 @@ jobs:
         warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
         fail-on-warning: ${{ github.event_name == 'push' }}  # Fail on push, warn on PR
         create-issue: ${{ github.event_name == 'push' }}     # Create issues for main branch
+        notify: 'maintainer1,reviewer2'                      # Assign issues to team members
         create-artifact: 'true'                              # Always create artifacts
         artifact-name: 'warning-report'
 ```
