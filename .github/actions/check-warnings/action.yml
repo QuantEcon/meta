@@ -404,7 +404,9 @@ runs:
             '',
             fileList,
             '',
-            `For further details please check ${issueUrl}`
+            `For further details please check ${issueUrl}`,
+            '',
+            'Note: This issue was automatically created by the [Check for Python Warnings Action](https://github.com/QuantEcon/meta/.github/actions/check-warnings).'
           ].join('\n');
           
           try {
