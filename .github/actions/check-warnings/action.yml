@@ -344,6 +344,49 @@ runs:
             core.setFailed('Failed to create issue: ' + error.message);
           }
 
+    - name: Post simple PR comment linking to issue
+      if: inputs.create-issue == 'true' && steps.check.outputs.warnings-found == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const warningDetails = '${{ steps.check.outputs.warning-details }}';
+          const issueUrl = '${{ steps.create-issue.outputs.issue-url }}';
+          
+          // Extract file names from warning details
+          const files = [];
+          const lines = warningDetails.split('\n');
+          for (const line of lines) {
+            if (line.includes(': ') && line.includes('instance(s) of')) {
+              const fileName = line.split(':')[0].trim();
+              if (fileName && !files.includes(fileName)) {
+                files.push(fileName);
+              }
+            }
+          }
+          
+          const fileList = files.map(file => `- ${file}`).join('\n');
+          
+          const body = [
+            'There were code execution warnings found in the following files:',
+            '',
+            fileList,
+            '',
+            `For further details please check ${issueUrl}`
+          ].join('\n');
+          
+          try {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+            console.log('Posted simple PR comment linking to issue');
+          } catch (error) {
+            console.error('Failed to create PR comment:', error);
+            core.setFailed('Failed to create PR comment: ' + error.message);
+          }
+
 branding:
   icon: 'alert-triangle'
   color: 'orange'

@@ -105,6 +105,13 @@ When `create-issue` is set to `true`, the action will automatically create a Git
 - Suggested next steps for resolution
 - Automatic labeling (`bug`, `documentation`, `python-warnings`)
 
+Additionally, when issues are created in pull request contexts, a simple notification comment is posted to the PR thread containing:
+
+- List of files with warnings
+- Direct link to the created issue for detailed information
+
+This provides immediate awareness to PR authors without cluttering the conversation with full warning details.
+
 ### Workflow Artifacts
 
 When `create-artifact` is set to `true`, the action generates a detailed Markdown report as a workflow artifact. This report includes:
@@ -173,10 +180,10 @@ permissions:
   contents: read          # For checking out the repository
   issues: write          # For creating GitHub issues (if create-issue is enabled)
   actions: read          # For creating workflow artifacts (if create-artifact is enabled)
-  pull-requests: write   # For posting PR comments (when fail-on-warning is true in PRs)
+  pull-requests: write   # For posting PR comments (when fail-on-warning is true OR create-issue is true in PRs)
 ```
 
-If you're only using the basic warning check functionality, only `contents: read` is required. Add `pull-requests: write` when you want PR comments on warnings.
+If you're only using the basic warning check functionality, only `contents: read` is required. Add `pull-requests: write` when you want PR comments on warnings or when using issue creation in PR contexts.
 
 ## Inputs
 
@@ -298,7 +305,8 @@ This action is particularly useful for:
    - Limiting warning types to only those relevant to your project
    - Setting appropriate artifact retention periods
 
-9. **Pull Request feedback**: When `fail-on-warning` is `true`:
-   - The action automatically posts detailed warning reports as PR comments
-   - This provides immediate feedback to developers without requiring log diving
+9. **Pull Request feedback**: 
+   - When `fail-on-warning` is `true`: The action posts detailed warning reports as PR comments
+   - When `create-issue` is `true`: The action posts simple notification comments linking to created issues
+   - Both features provide immediate feedback to developers without requiring log diving
    - Requires `pull-requests: write` permission in your workflow
