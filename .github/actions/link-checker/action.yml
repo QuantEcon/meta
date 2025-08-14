@@ -78,10 +78,18 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python3 -m pip install requests beautifulsoup4 --quiet
+
     - name: Check links and generate AI suggestions
       id: check
       shell: bash
       run: |
+        # Get the action directory
+        ACTION_DIR="${{ github.action_path }}"
+        
         # Parse inputs
         HTML_PATH="${{ inputs.html-path }}"
         MODE="${{ inputs.mode }}"
@@ -95,9 +103,6 @@ runs:
         echo "Mode: $MODE"
         echo "Silent codes: $SILENT_CODES"
         echo "AI suggestions enabled: $AI_SUGGESTIONS"
-        
-        # Convert comma-separated silent codes to array
-        IFS=',' read -ra SILENT_ARRAY <<< "$SILENT_CODES"
         
         # Initialize counters
         TOTAL_BROKEN=0
@@ -131,237 +136,7 @@ runs:
         
         echo "Found ${#FILES[@]} HTML files to check"
         
-        # Create Python script for link checking
-        cat > /tmp/link_checker.py << 'EOF'
-        import re
-        import sys
-        import requests
-        import urllib.parse
-        from bs4 import BeautifulSoup
-        import json
-        import time
-        import os
-        
-        def is_external_link(url):
-            """Check if URL is external (starts with http/https)"""
-            return url.startswith(('http://', 'https://'))
-        
-        def check_link(url, timeout, max_redirects, silent_codes):
-            """Check a single link and return status info"""
-            try:
-                # Set up session with redirects tracking
-                session = requests.Session()
-                session.max_redirects = max_redirects
-                
-                response = session.get(
-                    url, 
-                    timeout=timeout,
-                    allow_redirects=True,
-                    headers={'User-Agent': 'QuantEcon-LinkChecker/1.0'}
-                )
-                
-                result = {
-                    'url': url,
-                    'status_code': response.status_code,
-                    'final_url': response.url,
-                    'redirect_count': len(response.history),
-                    'redirected': len(response.history) > 0,
-                    'broken': False,
-                    'silent': False,
-                    'error': None
-                }
-                
-                # Check if status code should be silently reported
-                if response.status_code in silent_codes:
-                    result['silent'] = True
-                elif not response.ok:
-                    result['broken'] = True
-                
-                return result
-                
-            except requests.exceptions.Timeout:
-                return {
-                    'url': url, 'status_code': 0, 'final_url': url,
-                    'redirect_count': 0, 'redirected': False, 'broken': True,
-                    'silent': False, 'error': 'Timeout'
-                }
-            except requests.exceptions.ConnectionError:
-                return {
-                    'url': url, 'status_code': 0, 'final_url': url,
-                    'redirect_count': 0, 'redirected': False, 'broken': True,
-                    'silent': False, 'error': 'Connection Error'
-                }
-            except Exception as e:
-                return {
-                    'url': url, 'status_code': 0, 'final_url': url,
-                    'redirect_count': 0, 'redirected': False, 'broken': True,
-                    'silent': False, 'error': str(e)
-                }
-        
-        def extract_links_from_html(file_path):
-            """Extract all external links from HTML file"""
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                soup = BeautifulSoup(content, 'html.parser')
-                links = []
-                
-                # Find all anchor tags with href
-                for tag in soup.find_all('a', href=True):
-                    href = tag['href']
-                    if is_external_link(href):
-                        # Store link with context
-                        links.append({
-                            'url': href,
-                            'text': tag.get_text(strip=True)[:100],  # First 100 chars
-                            'line': None  # We could calculate line numbers if needed
-                        })
-                
-                return links
-                
-            except Exception as e:
-                print(f"Error parsing {file_path}: {e}", file=sys.stderr)
-                return []
-        
-        def generate_ai_suggestions(broken_results, redirect_results):
-            """Generate AI-powered suggestions for broken and redirected links"""
-            suggestions = []
-            
-            # Simple rule-based AI suggestions (can be enhanced with actual AI services)
-            for result in broken_results:
-                url = result['url']
-                suggestion = {
-                    'original_url': url,
-                    'issue': f"Broken link (Status: {result['status_code']})",
-                    'suggestions': []
-                }
-                
-                # Common URL fixes
-                if 'github.com' in url:
-                    # GitHub-specific suggestions
-                    if '/blob/master/' in url:
-                        new_url = url.replace('/blob/master/', '/blob/main/')
-                        suggestion['suggestions'].append({
-                            'type': 'branch_update',
-                            'url': new_url,
-                            'reason': 'GitHub default branch changed from master to main'
-                        })
-                    if 'github.io' in url and 'http://' in url:
-                        new_url = url.replace('http://', 'https://')
-                        suggestion['suggestions'].append({
-                            'type': 'https_upgrade',
-                            'url': new_url,
-                            'reason': 'GitHub Pages now requires HTTPS'
-                        })
-                
-                # Documentation site migrations
-                elif 'readthedocs.org' in url and 'http://' in url:
-                    new_url = url.replace('http://', 'https://')
-                    suggestion['suggestions'].append({
-                        'type': 'https_upgrade',
-                        'url': new_url,
-                        'reason': 'Read the Docs now requires HTTPS'
-                    })
-                
-                # Python.org domain changes
-                elif 'docs.python.org' in url:
-                    if '/2.7/' in url:
-                        new_url = url.replace('/2.7/', '/3/')
-                        suggestion['suggestions'].append({
-                            'type': 'version_update',
-                            'url': new_url,
-                            'reason': 'Python 2.7 is deprecated, consider Python 3 documentation'
-                        })
-                
-                # General HTTPS upgrade
-                elif url.startswith('http://') and 'localhost' not in url:
-                    new_url = url.replace('http://', 'https://')
-                    suggestion['suggestions'].append({
-                        'type': 'https_upgrade',
-                        'url': new_url,
-                        'reason': 'HTTPS is more secure and widely supported'
-                    })
-                
-                if suggestion['suggestions']:
-                    suggestions.append(suggestion)
-            
-            # Handle redirects
-            for result in redirect_results:
-                if result['redirect_count'] > 0:
-                    suggestion = {
-                        'original_url': result['url'],
-                        'issue': f"Redirected {result['redirect_count']} times",
-                        'suggestions': [{
-                            'type': 'redirect_update',
-                            'url': result['final_url'],
-                            'reason': f'Update to final destination to avoid {result["redirect_count"]} redirect(s)'
-                        }]
-                    }
-                    suggestions.append(suggestion)
-            
-            return suggestions
-        
-        if __name__ == "__main__":
-            file_path = sys.argv[1]
-            timeout = int(sys.argv[2])
-            max_redirects = int(sys.argv[3])
-            silent_codes = [int(x.strip()) for x in sys.argv[4].split(',') if x.strip()]
-            ai_enabled = sys.argv[5].lower() == 'true'
-            
-            # Extract links
-            links = extract_links_from_html(file_path)
-            if not links:
-                print(json.dumps({
-                    'broken_results': [], 'redirect_results': [], 
-                    'ai_suggestions': [], 'total_links': 0
-                }))
-                sys.exit(0)
-            
-            broken_results = []
-            redirect_results = []
-            
-            print(f"Checking {len(links)} links in {file_path}...", file=sys.stderr)
-            
-            # Check each link
-            for i, link_info in enumerate(links):
-                url = link_info['url']
-                result = check_link(url, timeout, max_redirects, silent_codes)
-                result['file'] = file_path
-                result['text'] = link_info['text']
-                
-                if result['broken'] and not result['silent']:
-                    broken_results.append(result)
-                elif result['redirected']:
-                    redirect_results.append(result)
-                
-                # Add small delay to be respectful
-                if i < len(links) - 1:
-                    time.sleep(0.1)
-            
-            # Generate AI suggestions
-            ai_suggestions = []
-            if ai_enabled:
-                ai_suggestions = generate_ai_suggestions(broken_results, redirect_results)
-            
-            # Output results
-            print(json.dumps({
-                'broken_results': broken_results,
-                'redirect_results': redirect_results, 
-                'ai_suggestions': ai_suggestions,
-                'total_links': len(links)
-            }))
-        EOF
-        
-        # Install required Python packages
-        python3 -m pip install requests beautifulsoup4 --quiet
-        
         # Process each HTML file
-        ALL_BROKEN_RESULTS=()
-        ALL_REDIRECT_RESULTS=()
-        ALL_AI_SUGGESTIONS=()
-        TOTAL_LINKS_CHECKED=0
-        
         for file in "${FILES[@]}"; do
           if [ ! -f "$file" ]; then
             continue
@@ -369,8 +144,18 @@ runs:
           
           echo "Checking links in: $file"
           
-          # Run Python script and capture JSON output
-          result_json=$(python3 /tmp/link_checker.py "$file" "$TIMEOUT" "$MAX_REDIRECTS" "$SILENT_CODES" "$AI_SUGGESTIONS" 2>/tmp/stderr.log)
+          # Build AI suggestions flag
+          AI_FLAG=""
+          if [ "$AI_SUGGESTIONS" = "true" ]; then
+            AI_FLAG="--ai-suggestions"
+          fi
+          
+          # Run link checker and capture JSON output
+          result_json=$(python3 "$ACTION_DIR/link_checker.py" "$file" \
+            --timeout "$TIMEOUT" \
+            --max-redirects "$MAX_REDIRECTS" \
+            --silent-codes "$SILENT_CODES" \
+            $AI_FLAG 2>/tmp/stderr.log)
           
           if [ $? -ne 0 ] || [ -z "$result_json" ]; then
             echo "Warning: Failed to process $file"
@@ -385,47 +170,24 @@ runs:
           
           TOTAL_BROKEN=$((TOTAL_BROKEN + broken_count))
           TOTAL_REDIRECTS=$((TOTAL_REDIRECTS + redirect_count))
-          TOTAL_LINKS_CHECKED=$((TOTAL_LINKS_CHECKED + total_links))
           
           if [ "$broken_count" -gt 0 ] || [ "$redirect_count" -gt 0 ]; then
             BROKEN_LINKS_FOUND="true"
             
             # Extract detailed results for reporting
             if [ "$broken_count" -gt 0 ]; then
-              broken_details=$(echo "$result_json" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for result in data['broken_results']:
-    error_info = f\" ({result['error']})\" if result['error'] else \"\"
-    print(f\"❌ {result['url']} - Status: {result['status_code']}{error_info}\")
-    if result['text']:
-        print(f\"   Link text: {result['text']}\")
-")
+              broken_details=$(echo "$result_json" | python3 "$ACTION_DIR/format_results.py" broken)
               LINK_DETAILS="$LINK_DETAILS\n\n**$file** - $broken_count broken link(s):\n$broken_details"
             fi
             
             if [ "$redirect_count" -gt 0 ]; then
-              redirect_details=$(echo "$result_json" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for result in data['redirect_results']:
-    print(f\"🔄 {result['url']} -> {result['final_url']} ({result['redirect_count']} redirects)\")
-")
+              redirect_details=$(echo "$result_json" | python3 "$ACTION_DIR/format_results.py" redirect)
               LINK_DETAILS="$LINK_DETAILS\n\n**$file** - $redirect_count redirect(s):\n$redirect_details"
             fi
             
             # Extract AI suggestions
             if [ "$AI_SUGGESTIONS" = "true" ]; then
-              ai_details=$(echo "$result_json" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-for suggestion in data['ai_suggestions']:
-    print(f\"🤖 {suggestion['original_url']}\")
-    print(f\"   Issue: {suggestion['issue']}\")
-    for s in suggestion['suggestions']:
-        print(f\"   💡 {s['type']}: {s['url']}\")
-        print(f\"      Reason: {s['reason']}\")
-")
+              ai_details=$(echo "$result_json" | python3 "$ACTION_DIR/format_results.py" ai)
               if [ -n "$ai_details" ]; then
                 AI_SUGGESTIONS_OUTPUT="$AI_SUGGESTIONS_OUTPUT\n\n**$file** - AI Suggestions:\n$ai_details"
               fi
@@ -448,9 +210,8 @@ for suggestion in data['ai_suggestions']:
         
         # Create detailed report for artifacts/issues
         DETAILED_REPORT="## Link Check Summary\n\n"
-        DETAILED_REPORT="$DETAILED_REPORT- **Total links checked**: $TOTAL_LINKS_CHECKED\n"
-        DETAILED_REPORT="$DETAILED_REPORT- **Broken links**: $TOTAL_BROKEN\n"
-        DETAILED_REPORT="$DETAILED_REPORT- **Redirects found**: $TOTAL_REDIRECTS\n\n"
+        DETAILED_REPORT="$DETAILED_REPORT- **Total broken links**: $TOTAL_BROKEN\n"
+        DETAILED_REPORT="$DETAILED_REPORT- **Total redirects found**: $TOTAL_REDIRECTS\n\n"
         
         if [ "$TOTAL_BROKEN" -gt 0 ]; then
           DETAILED_REPORT="$DETAILED_REPORT## Broken Links\n$LINK_DETAILS\n\n"
@@ -466,12 +227,12 @@ for suggestion in data['ai_suggestions']:
         
         # Summary
         if [ "$BROKEN_LINKS_FOUND" = "true" ]; then
-          echo "❌ Found $TOTAL_BROKEN broken link(s) and $TOTAL_REDIRECTS redirect(s) in $TOTAL_LINKS_CHECKED total links"
+          echo "❌ Found $TOTAL_BROKEN broken link(s) and $TOTAL_REDIRECTS redirect(s)"
           if [ "$FAIL_ON_BROKEN" = "true" ]; then
             echo "::error::Found $TOTAL_BROKEN broken link(s) in HTML files"
           fi
         else
-          echo "✅ No broken links found in $TOTAL_LINKS_CHECKED total links checked"
+          echo "✅ No broken links found"
         fi
 
     - name: Post PR comment with link report
@@ -537,7 +298,6 @@ for suggestion in data['ai_suggestions']:
         ARTIFACT_FILE="$ARTIFACT_NAME.md"
         CURRENT_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
         
-        # Create the report file
         {
           echo "# Link Check Report"
           echo ""
@@ -660,7 +420,6 @@ for suggestion in data['ai_suggestions']:
       uses: actions/github-script@v7
       with:
         script: |
-          const linkDetails = ${{ toJSON(steps.check.outputs.link-details) }};
           const issueUrl = '${{ steps.create-issue.outputs.issue-url }}';
           
           const body = [
