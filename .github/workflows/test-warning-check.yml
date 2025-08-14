@@ -19,7 +19,7 @@ jobs:
         id: clean-test
         uses: .//.github/actions/check-warnings
         with:
-          html-path: './test/html-samples/clean.html'
+          html-path: './test/check-warnings/clean.html'
           fail-on-warning: 'false'
       
       - name: Verify clean results
@@ -43,7 +43,7 @@ jobs:
         id: warning-test
         uses: .//.github/actions/check-warnings
         with:
-          html-path: './test/html-samples'
+          html-path: './test/check-warnings'
           fail-on-warning: 'false'
       
       - name: Verify warning results
@@ -73,7 +73,7 @@ jobs:
         continue-on-error: true
         uses: .//.github/actions/check-warnings
         with:
-          html-path: './test/html-samples/with-warnings.html'
+          html-path: './test/check-warnings/with-warnings.html'
           fail-on-warning: 'true'
       
       - name: Verify action failed
