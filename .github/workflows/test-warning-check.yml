@@ -1,0 +1,85 @@
+name: Test Warning Check Action
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-clean-files:
+    runs-on: ubuntu-latest
+    name: Test with clean HTML files
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with clean files
+        id: clean-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/html-samples/clean.html'
+          fail-on-warning: 'false'
+      
+      - name: Verify clean results
+        run: |
+          echo "Warnings found: ${{ steps.clean-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.clean-test.outputs.warning-count }}"
+          if [ "${{ steps.clean-test.outputs.warnings-found }}" != "false" ]; then
+            echo "❌ Expected no warnings but found some"
+            exit 1
+          fi
+          echo "✅ Clean test passed"
+
+  test-files-with-warnings:
+    runs-on: ubuntu-latest
+    name: Test with HTML files containing warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with files containing warnings
+        id: warning-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/html-samples'
+          fail-on-warning: 'false'
+      
+      - name: Verify warning results
+        run: |
+          echo "Warnings found: ${{ steps.warning-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.warning-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.warning-test.outputs.warning-details }}"
+          if [ "${{ steps.warning-test.outputs.warnings-found }}" != "true" ]; then
+            echo "❌ Expected warnings but found none"
+            exit 1
+          fi
+          if [ "${{ steps.warning-test.outputs.warning-count }}" -lt "3" ]; then
+            echo "❌ Expected at least 3 warnings but found ${{ steps.warning-test.outputs.warning-count }}"
+            exit 1
+          fi
+          echo "✅ Warning test passed"
+
+  test-fail-on-warning:
+    runs-on: ubuntu-latest
+    name: Test fail-on-warning functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test that action fails when warnings found and fail-on-warning is true
+        id: fail-test
+        continue-on-error: true
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/html-samples/with-warnings.html'
+          fail-on-warning: 'true'
+      
+      - name: Verify action failed
+        run: |
+          if [ "${{ steps.fail-test.outcome }}" != "failure" ]; then
+            echo "❌ Expected action to fail but it succeeded"
+            exit 1
+          fi
+          echo "✅ Fail-on-warning test passed"
