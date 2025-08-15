@@ -44,9 +44,9 @@ inputs:
     required: false
     default: ''
   timeout:
-    description: 'Timeout in seconds for each link check'
+    description: 'Timeout in seconds for each link check (increased default for better robustness)'
     required: false
-    default: '30'
+    default: '45'
   max-redirects:
     description: 'Maximum number of redirects to follow'
     required: false

@@ -5,13 +5,14 @@ This GitHub Action scans HTML files for web links and validates them, providing 
 ## Features
 
 - **Smart Link Validation**: Checks external web links in HTML files with configurable timeout and redirect handling
+- **Enhanced Robustness**: Intelligent detection of bot-blocked sites to reduce false positives
 - **AI-Powered Suggestions**: Provides intelligent recommendations for broken or redirected links
 - **Two Scanning Modes**: Full project scan or PR-specific changed files only  
 - **Configurable Status Codes**: Define which HTTP status codes to silently report (e.g., 403, 503)
 - **Redirect Detection**: Identifies and suggests updates for redirected links
 - **GitHub Integration**: Creates issues, PR comments, and workflow artifacts
 - **MyST Markdown Support**: Works with Jupyter Book projects by scanning HTML output
-- **Performance Optimized**: Respectful rate limiting and efficient scanning
+- **Performance Optimized**: Respectful rate limiting, improved timeouts, and efficient scanning
 
 ## Usage
 
@@ -104,6 +105,26 @@ jobs:
     timeout: '30'
     max-redirects: '5'
 ```
+
+## False Positive Reduction
+
+The action includes intelligent logic to reduce false positives for legitimate sites:
+
+### Bot Blocking Detection
+- **Major Sites**: Automatically detects common sites that block automated requests (Netflix, Amazon, Facebook, etc.)
+- **Encoding Issues**: Identifies encoding errors that often indicate bot protection
+- **Status Code Analysis**: Recognizes rate limiting (429) and bot blocking patterns
+- **Silent Reporting**: Marks likely bot-blocked sites as silent instead of broken
+
+### Improved Robustness
+- **Browser-like Headers**: Uses realistic browser headers to reduce blocking
+- **Increased Timeout**: Default 45-second timeout for slow-loading legitimate sites
+- **Smart Error Handling**: Distinguishes between genuine broken links and temporary blocks
+
+### AI Suggestion Filtering
+- **Constructive Suggestions**: Only suggests fixes, not removals, for legitimate domains
+- **Manual Review**: Suggests manual verification for unknown domains instead of automatic removal
+- **Domain Whitelist**: Recognizes trusted domains (GitHub, Python.org, etc.) and handles them appropriately
 
 ## AI-Powered Suggestions
 
@@ -261,7 +282,7 @@ permissions:
 | `create-artifact` | Create workflow artifact | No | `false` |
 | `artifact-name` | Name for workflow artifact | No | `link-check-report` |
 | `notify` | Users to assign to created issue | No | `` |
-| `timeout` | Timeout per link (seconds) | No | `30` |
+| `timeout` | Timeout per link (seconds) | No | `45` |
 | `max-redirects` | Maximum redirects to follow | No | `5` |
 
 ## Outputs
@@ -289,10 +310,20 @@ permissions:
 
 ### Common Issues
 
-1. **Timeout Errors**: Increase `timeout` value for slow-responding sites
-2. **Rate Limiting**: Add delays or reduce concurrent requests
-3. **False Positives**: Add problematic status codes to `silent-codes`
-4. **Large Repositories**: Use `changed` mode for PR workflows
+1. **Timeout Errors**: Increase `timeout` value for slow-responding sites (default is now 45s)
+2. **False Positives**: The action automatically detects major sites that block bots (Netflix, Amazon, etc.)
+3. **Rate Limiting**: Add `429` to `silent-codes` for rate-limited sites
+4. **Bot Blocking**: Legitimate sites blocking automated requests are automatically handled gracefully
+5. **Large Repositories**: Use `changed` mode for PR workflows
+
+### False Positive Mitigation
+
+If legitimate links are being flagged as broken:
+
+1. **Check if it's a major site**: Netflix, Amazon, Facebook, etc. are automatically detected as likely bot-blocked
+2. **Increase timeout**: Use `timeout: '60'` for slower sites like tutorials or educational content
+3. **Add to silent codes**: If a site consistently returns specific error codes, add them to `silent-codes`
+4. **Review AI suggestions**: The action provides constructive fix suggestions rather than suggesting removal
 
 ### Debug Output
 
