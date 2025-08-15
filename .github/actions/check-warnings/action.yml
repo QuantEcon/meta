@@ -10,7 +10,7 @@ inputs:
   warnings:
     description: 'Comma-separated list of warnings to check for'
     required: false
-    default: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    default: 'UserWarning,DeprecationWarning,PendingDeprecationWarning,SyntaxWarning,RuntimeWarning,FutureWarning,ImportWarning,UnicodeWarning,BytesWarning,ResourceWarning,EncodingWarning'
   fail-on-warning:
     description: 'Whether to fail the workflow if warnings are found'
     required: false

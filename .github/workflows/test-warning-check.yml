@@ -83,3 +83,45 @@ jobs:
             exit 1
           fi
           echo "✅ Fail-on-warning test passed"
+
+  test-new-warning-types:
+    runs-on: ubuntu-latest
+    name: Test new warning types (UserWarning, RuntimeWarning, etc.)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with new warning types
+        id: new-warning-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/check-warnings/with-new-warnings.html'
+          fail-on-warning: 'false'
+      
+      - name: Verify new warning types are detected
+        run: |
+          echo "Warnings found: ${{ steps.new-warning-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.new-warning-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.new-warning-test.outputs.warning-details }}"
+          if [ "${{ steps.new-warning-test.outputs.warnings-found }}" != "true" ]; then
+            echo "❌ Expected new warning types to be found but found none"
+            exit 1
+          fi
+          if [ "${{ steps.new-warning-test.outputs.warning-count }}" -lt "5" ]; then
+            echo "❌ Expected at least 5 new warning types but found ${{ steps.new-warning-test.outputs.warning-count }}"
+            exit 1
+          fi
+          # Check that specific new warning types are detected
+          if [[ "${{ steps.new-warning-test.outputs.warning-details }}" != *"UserWarning"* ]]; then
+            echo "❌ UserWarning not detected"
+            exit 1
+          fi
+          if [[ "${{ steps.new-warning-test.outputs.warning-details }}" != *"RuntimeWarning"* ]]; then
+            echo "❌ RuntimeWarning not detected"
+            exit 1
+          fi
+          if [[ "${{ steps.new-warning-test.outputs.warning-details }}" != *"ResourceWarning"* ]]; then
+            echo "❌ ResourceWarning not detected"
+            exit 1
+          fi
+          echo "✅ New warning types test passed"

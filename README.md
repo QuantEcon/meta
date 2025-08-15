@@ -17,7 +17,7 @@ A GitHub Action that scans HTML files for Python warnings and optionally fails t
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'true'
 ```
 

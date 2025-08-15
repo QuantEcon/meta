@@ -8,7 +8,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
 
 - Scans HTML files for configurable Python warnings **within code cell outputs only**
 - Prevents false positives by only checking warnings in `cell_output` HTML elements
-- Supports multiple warning types (SyntaxWarning, DeprecationWarning, FutureWarning)
+- Supports multiple warning types (all Python warning types by default: UserWarning, DeprecationWarning, PendingDeprecationWarning, SyntaxWarning, RuntimeWarning, FutureWarning, ImportWarning, UnicodeWarning, BytesWarning, ResourceWarning, EncodingWarning)
 - Provides detailed output about warnings found
 - Optionally fails the workflow when warnings are detected
 - **Creates GitHub issues** with detailed warning reports
@@ -32,7 +32,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'true'  # This will post a comment to the PR if warnings are found
 ```
 
@@ -43,7 +43,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning,UserWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'false'
     create-issue: 'true'
     issue-title: 'Python Warnings Found in Documentation Build'
@@ -56,7 +56,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'false'
     create-issue: 'true'
     issue-title: 'Python Warnings Found in Documentation Build'
@@ -70,7 +70,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'true'
     create-artifact: 'true'
     artifact-name: 'python-warning-report'
@@ -83,7 +83,7 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning,UserWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'false'
     create-issue: 'true'
     issue-title: 'Python Warnings Detected in Build'
@@ -215,7 +215,7 @@ If you're only using the basic warning check functionality, only `contents: read
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
 | `html-path` | Path to directory containing HTML files to scan | No | `.` |
-| `warnings` | Comma-separated list of warnings to check for | No | `SyntaxWarning,DeprecationWarning,FutureWarning` |
+| `warnings` | Comma-separated list of warnings to check for | No | `UserWarning,DeprecationWarning,PendingDeprecationWarning,SyntaxWarning,RuntimeWarning,FutureWarning,ImportWarning,UnicodeWarning,BytesWarning,ResourceWarning,EncodingWarning` |
 | `fail-on-warning` | Whether to fail the workflow if warnings are found | No | `true` |
 | `create-issue` | Whether to create a GitHub issue when warnings are found | No | `false` |
 | `issue-title` | Title for the GitHub issue when warnings are found | No | `Python Warnings Found in Documentation Build` |
@@ -276,7 +276,7 @@ jobs:
       uses: QuantEcon/meta/.github/actions/check-warnings@main
       with:
         html-path: './_build/html'
-        warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+        # Uses comprehensive default warnings (all Python warning types)
         fail-on-warning: ${{ github.event_name == 'push' }}  # Fail on push, warn on PR
         create-issue: ${{ github.event_name == 'push' }}     # Create issues for main branch
         notify: 'maintainer1,reviewer2'                      # Assign issues to team members

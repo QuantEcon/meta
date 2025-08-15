@@ -39,7 +39,7 @@ jobs:
       uses: QuantEcon/meta/.github/actions/check-warnings@main
       with:
         html-path: './_build/html'
-        warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+        # Uses comprehensive default warnings (all Python warning types)
         fail-on-warning: 'true'
 ```
 
@@ -158,7 +158,7 @@ jobs:
       uses: QuantEcon/meta/.github/actions/check-warnings@main
       with:
         html-path: './_build/html'
-        warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning,UserWarning'
+        # Uses comprehensive default warnings (all Python warning types)
         fail-on-warning: 'false'  # Don't fail on warnings
         create-issue: ${{ github.event_name == 'push' }}  # Create issues only on push to main
         issue-title: 'Python Warnings in Documentation Build - ${{ github.sha }}'
@@ -267,7 +267,7 @@ jobs:
       uses: QuantEcon/meta/.github/actions/check-warnings@main
       with:
         html-path: './output'
-        warnings: ${{ github.event.inputs.custom_warnings || 'SyntaxWarning,DeprecationWarning,FutureWarning' }}
+        warnings: ${{ github.event.inputs.custom_warnings || 'UserWarning,RuntimeWarning,ResourceWarning' }}
         fail-on-warning: 'true'
 ```
 
@@ -308,7 +308,7 @@ jobs:
       uses: QuantEcon/meta/.github/actions/check-warnings@main
       with:
         html-path: './_build/html'
-        warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+        # Uses comprehensive default warnings (all Python warning types)
         fail-on-warning: 'false'
       
     - name: Upload HTML artifacts if warnings found
