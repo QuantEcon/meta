@@ -29,9 +29,17 @@ api_call() {
     fi
     
     while [ $retry_count -lt $max_retries ]; do
+        # Construct URL with proper query parameter handling
+        local url="https://api.github.com${endpoint}"
+        if [[ "$endpoint" == *"?"* ]]; then
+            url="${url}&page=${page}&per_page=100"
+        else
+            url="${url}?page=${page}&per_page=100"
+        fi
+        
         local response=$(curl -s -w "\n%{http_code}" -H "Authorization: token ${GITHUB_TOKEN}" \
                             -H "Accept: application/vnd.github.v3+json" \
-                            "https://api.github.com${endpoint}?page=${page}&per_page=100")
+                            "$url")
         
         local http_code=$(echo "$response" | tail -n1)
         local body=$(echo "$response" | head -n -1)
