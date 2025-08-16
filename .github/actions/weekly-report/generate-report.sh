@@ -148,6 +148,7 @@ if [ -n "$EXCLUDE_REPOS" ]; then
 fi
 
 # Initialize report variables
+total_current_issues=0
 total_opened_issues=0
 total_closed_issues=0
 total_merged_prs=0
@@ -163,8 +164,8 @@ if [ "$OUTPUT_FORMAT" = "markdown" ]; then
 
 ## Summary
 
-| Repository | Opened Issues | Closed Issues | Merged PRs |
-|------------|---------------|---------------|------------|"
+| Repository | Total Current Issues | Opened Issues | Closed Issues | Merged PRs |
+|------------|---------------------|---------------|---------------|------------|"
     echo "DEBUG: Initial report content set, length: ${#report_content}"
 fi
 
@@ -175,6 +176,19 @@ while IFS= read -r repo; do
     repo_count=$((repo_count + 1))
     
     echo "Processing repository: $repo"
+    
+    # Count total current open issues
+    current_issues_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues?state=open")
+    if [ $? -eq 0 ]; then
+        current_issues=$(echo "$current_issues_response" | jq 'if type == "array" then [.[] | select(.pull_request == null)] | length else 0 end')
+    else
+        current_issues=0
+        if echo "$current_issues_response" | jq -e '.error' 2>/dev/null | grep -q "rate_limit"; then
+            rate_limited_repos=$((rate_limited_repos + 1))
+        else
+            failed_repos=$((failed_repos + 1))
+        fi
+    fi
     
     # Count opened issues in the last week
     opened_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues")
@@ -216,20 +230,22 @@ while IFS= read -r repo; do
     fi
     
     # Handle null/empty values
+    current_issues=${current_issues:-0}
     opened_issues=${opened_issues:-0}
     closed_issues=${closed_issues:-0}
     merged_prs=${merged_prs:-0}
     
     # Add to totals
+    total_current_issues=$((total_current_issues + current_issues))
     total_opened_issues=$((total_opened_issues + opened_issues))
     total_closed_issues=$((total_closed_issues + closed_issues))
     total_merged_prs=$((total_merged_prs + merged_prs))
     
-    # Add to report if there's activity
-    if [ $((opened_issues + closed_issues + merged_prs)) -gt 0 ]; then
+    # Add to report if there's activity or current open issues
+    if [ $((current_issues + opened_issues + closed_issues + merged_prs)) -gt 0 ]; then
         if [ "$OUTPUT_FORMAT" = "markdown" ]; then
             report_content="${report_content}
-| $repo | $opened_issues | $closed_issues | $merged_prs |"
+| $repo | $current_issues | $opened_issues | $closed_issues | $merged_prs |"
         fi
     fi
     
@@ -241,11 +257,12 @@ echo "DEBUG: Final report content length: ${#report_content}"
 # Add summary to report
 if [ "$OUTPUT_FORMAT" = "markdown" ]; then
     report_content="${report_content}
-|**Total**|**$total_opened_issues**|**$total_closed_issues**|**$total_merged_prs**|
+|**Total**|**$total_current_issues**|**$total_opened_issues**|**$total_closed_issues**|**$total_merged_prs**|
 
 ## Details
 
 - **Total Repositories Checked:** $(echo "$repo_names" | wc -l)
+- **Total Current Open Issues:** $total_current_issues
 - **Total Issues Opened:** $total_opened_issues
 - **Total Issues Closed:** $total_closed_issues
 - **Total PRs Merged:** $total_merged_prs"
@@ -275,7 +292,7 @@ if [ "$OUTPUT_FORMAT" = "markdown" ]; then
 fi
 
 # Create summary
-summary="Week Summary: $total_opened_issues issues opened, $total_closed_issues issues closed, $total_merged_prs PRs merged"
+summary="Week Summary: $total_current_issues current open issues, $total_opened_issues issues opened, $total_closed_issues issues closed, $total_merged_prs PRs merged"
 
 # Save report to file
 echo "$report_content" > weekly-report.md
