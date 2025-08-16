@@ -5,6 +5,7 @@ set -e
 GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
 ORGANIZATION="${INPUT_ORGANIZATION:-QuantEcon}"
 OUTPUT_FORMAT="${INPUT_OUTPUT_FORMAT:-markdown}"
+EXCLUDE_REPOS="${INPUT_EXCLUDE_REPOS:-}"
 
 # Date calculations for last week
 WEEK_AGO=$(date -d "7 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -50,6 +51,35 @@ if [ -z "$repo_names" ]; then
 else
     echo "Found repositories with recent activity:"
     echo "$repo_names" | head -10  # Show first 10 for logging
+fi
+
+# Filter out excluded repositories if any are specified
+if [ -n "$EXCLUDE_REPOS" ]; then
+    echo "Excluding repositories: $EXCLUDE_REPOS"
+    # Convert comma-separated list to array and filter out excluded repos
+    IFS=',' read -ra exclude_array <<< "$EXCLUDE_REPOS"
+    filtered_repos=""
+    while IFS= read -r repo; do
+        [ -z "$repo" ] && continue
+        excluded=false
+        for exclude_repo in "${exclude_array[@]}"; do
+            # Trim whitespace and compare
+            exclude_repo=$(echo "$exclude_repo" | xargs)
+            if [ "$repo" = "$exclude_repo" ]; then
+                excluded=true
+                echo "Excluding repository: $repo"
+                break
+            fi
+        done
+        if [ "$excluded" = false ]; then
+            if [ -z "$filtered_repos" ]; then
+                filtered_repos="$repo"
+            else
+                filtered_repos="$filtered_repos"$'\n'"$repo"
+            fi
+        fi
+    done <<< "$repo_names"
+    repo_names="$filtered_repos"
 fi
 
 # Initialize report variables

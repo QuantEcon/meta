@@ -24,6 +24,7 @@ This action generates a report containing:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     organization: 'QuantEcon'
     output-format: 'markdown'
+    exclude-repos: 'lecture-python.notebooks,auto-updated-repo'
 ```
 
 ## Inputs
@@ -33,6 +34,7 @@ This action generates a report containing:
 | `github-token` | GitHub token with access to the organization | Yes | - |
 | `organization` | GitHub organization name | No | `QuantEcon` |
 | `output-format` | Output format (`markdown` or `json`) | No | `markdown` |
+| `exclude-repos` | Comma-separated list of repository names to exclude from the report | No | `''` |
 
 ## Outputs
 
