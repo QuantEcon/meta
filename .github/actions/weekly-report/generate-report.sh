@@ -105,15 +105,15 @@ while IFS= read -r repo; do
     
     # Count opened issues in the last week
     opened_issues=$(api_call "/repos/${ORGANIZATION}/${repo}/issues" | \
-        jq --arg since "$WEEK_AGO" '[.[] | select(.created_at >= $since and .pull_request == null)] | length')
+        jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.created_at >= $since and .pull_request == null)] | length else 0 end')
     
     # Count closed issues in the last week
     closed_issues=$(api_call "/repos/${ORGANIZATION}/${repo}/issues?state=closed" | \
-        jq --arg since "$WEEK_AGO" '[.[] | select(.closed_at >= $since and .pull_request == null)] | length')
+        jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.closed_at != null and .closed_at >= $since and .pull_request == null)] | length else 0 end')
     
     # Count merged PRs in the last week
     merged_prs=$(api_call "/repos/${ORGANIZATION}/${repo}/pulls?state=closed" | \
-        jq --arg since "$WEEK_AGO" '[.[] | select(.merged_at != null and .merged_at >= $since)] | length')
+        jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.merged_at != null and .merged_at >= $since)] | length else 0 end')
     
     # Handle null/empty values
     opened_issues=${opened_issues:-0}
