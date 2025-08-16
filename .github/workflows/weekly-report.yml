@@ -33,8 +33,17 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const reportContent = `${{ steps.report.outputs.report-content }}`;
-            const summary = `${{ steps.report.outputs.report-summary }}`;
+            const fs = require('fs');
+            
+            // Read the report content directly from the generated file
+            let reportContent = '';
+            try {
+              reportContent = fs.readFileSync('weekly-report.md', 'utf8');
+              console.log(`Successfully read report file, length: ${reportContent.length}`);
+            } catch (error) {
+              console.error('Failed to read weekly-report.md:', error);
+              reportContent = 'Error: Unable to load weekly report content.';
+            }
             
             // Create issue title with current date
             const now = new Date();
@@ -55,7 +64,7 @@ jobs:
             });
             
             console.log(`Created issue: ${title}`);
-            console.log(`Summary: ${summary}`);
+            console.log(`Report content length: ${reportContent.length}`);
       
       - name: Upload report as artifact
         uses: actions/upload-artifact@v4

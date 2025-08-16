@@ -18,6 +18,10 @@ inputs:
     description: 'Comma-separated list of repository names to exclude from the report'
     required: false
     default: ''
+  api-delay:
+    description: 'Delay in seconds between API calls to avoid rate limits (0 = no delay)'
+    required: false
+    default: '0'
 
 outputs:
   report-content:
@@ -36,3 +40,4 @@ runs:
         INPUT_ORGANIZATION: ${{ inputs.organization }}
         INPUT_OUTPUT_FORMAT: ${{ inputs.output-format }}
         INPUT_EXCLUDE_REPOS: ${{ inputs.exclude-repos }}
+        INPUT_API_DELAY: ${{ inputs.api-delay }}
