@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test HTML for Exclude Warning Functionality</title>
+</head>
+<body>
+    <h1>Test Page</h1>
+    
+    <!-- This should be detected - UserWarning in cell output -->
+    <div class="cell_output">
+        <pre>/home/user/script.py:10: UserWarning: This is a test UserWarning message
+  result = some_function()
+</pre>
+    </div>
+    
+    <!-- This should be detected - DeprecationWarning in cell output -->
+    <div class="cell_output">
+        <pre>/home/user/script.py:20: DeprecationWarning: This function is deprecated
+  old_function()
+</pre>
+    </div>
+    
+    <!-- This should be detected - RuntimeWarning in cell output -->
+    <div class="cell_output">
+        <pre>/home/user/script.py:30: RuntimeWarning: Invalid value encountered
+  result = compute()
+</pre>
+    </div>
+    
+    <!-- This should be detected - ResourceWarning in cell output -->
+    <div class="cell_output">
+        <pre>/home/user/script.py:40: ResourceWarning: unclosed file
+  f = open('file.txt')
+</pre>
+    </div>
+    
+    <!-- This should NOT be detected - warning in regular content -->
+    <p>This paragraph mentions UserWarning but should not be detected.</p>
+    
+</body>
+</html>

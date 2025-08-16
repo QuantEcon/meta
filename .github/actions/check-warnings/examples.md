@@ -271,6 +271,99 @@ jobs:
         fail-on-warning: 'true'
 ```
 
+## Example 6b: Excluding Specific Warning Types
+
+```yaml
+name: Check with Warning Exclusions
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  warning-check-with-exclusions:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Build documentation
+      run: |
+        jupyter-book build .
+    
+    - name: Check for warnings excluding upstream issues
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './_build/html'
+        exclude-warning: 'UserWarning'  # Exclude problematic upstream warnings
+        fail-on-warning: 'true'
+```
+
+## Example 6c: Multiple Warning Exclusions
+
+```yaml
+name: Check with Multiple Warning Exclusions
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  warning-check-multiple-exclusions:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Build documentation
+      run: |
+        jupyter-book build .
+    
+    - name: Check for warnings excluding multiple types
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './_build/html'
+        exclude-warning: 'UserWarning,RuntimeWarning,ResourceWarning'  # Exclude multiple warning types
+        fail-on-warning: 'true'
+        create-artifact: 'true'
+        artifact-name: 'filtered-warning-report'
+```
+
+## Example 6d: Custom Warnings with Exclusions
+
+```yaml
+name: Custom Warnings with Exclusions
+
+on:
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday
+
+jobs:
+  custom-warning-check-with-exclusions:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Build project
+      run: |
+        make build
+    
+    - name: Check for specific warnings but exclude problematic ones
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './output'
+        warnings: 'UserWarning,DeprecationWarning,RuntimeWarning,FutureWarning,ResourceWarning'
+        exclude-warning: 'ResourceWarning,RuntimeWarning'  # Exclude known upstream issues
+        fail-on-warning: 'false'
+        create-issue: 'true'
+        issue-title: 'Critical Python Warnings Found (Filtered)'
+        notify: 'team-lead'
+```
+
 ## Example 7: Matrix Strategy
 
 ```yaml

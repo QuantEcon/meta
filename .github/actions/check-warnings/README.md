@@ -92,6 +92,42 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
     artifact-name: 'detailed-warning-report'
 ```
 
+### Excluding Specific Warning Types
+
+Sometimes you may want to temporarily exclude certain warning types (e.g., when dealing with upstream warnings that take time to fix):
+
+```yaml
+- name: Check for Python warnings excluding upstream warnings
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    exclude-warning: 'UserWarning'  # Exclude single warning type
+    fail-on-warning: 'true'
+```
+
+```yaml
+- name: Check for Python warnings excluding multiple warning types
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    exclude-warning: 'UserWarning,RuntimeWarning,ResourceWarning'  # Exclude multiple warnings
+    fail-on-warning: 'true'
+```
+
+### Custom Warning Types with Exclusions
+
+You can combine custom warning lists with exclusions:
+
+```yaml
+- name: Check for specific warnings but exclude problematic ones
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    warnings: 'UserWarning,DeprecationWarning,RuntimeWarning,ResourceWarning'
+    exclude-warning: 'ResourceWarning'  # Check all above except ResourceWarning
+    fail-on-warning: 'true'
+```
+
 ### Using Outputs
 
 ```yaml
@@ -216,6 +252,7 @@ If you're only using the basic warning check functionality, only `contents: read
 |-------|-------------|----------|---------|
 | `html-path` | Path to directory containing HTML files to scan | No | `.` |
 | `warnings` | Comma-separated list of warnings to check for | No | `UserWarning,DeprecationWarning,PendingDeprecationWarning,SyntaxWarning,RuntimeWarning,FutureWarning,ImportWarning,UnicodeWarning,BytesWarning,ResourceWarning,EncodingWarning` |
+| `exclude-warning` | Comma-separated list of warnings to exclude from checking (can be a single warning or multiple warnings) | No | `` |
 | `fail-on-warning` | Whether to fail the workflow if warnings are found | No | `true` |
 | `create-issue` | Whether to create a GitHub issue when warnings are found | No | `false` |
 | `issue-title` | Title for the GitHub issue when warnings are found | No | `Python Warnings Found in Documentation Build` |
@@ -313,7 +350,12 @@ This action is particularly useful for:
 
 3. **Customize warning types**: Adjust the `warnings` input to match your project's needs.
 
-4. **Path considerations**: Make sure the `html-path` points to where your build process outputs HTML files.
+4. **Exclude problematic warnings temporarily**: Use `exclude-warning` to temporarily exclude warnings from upstream dependencies or issues that take time to fix:
+   ```yaml
+   exclude-warning: 'UserWarning,RuntimeWarning'  # Exclude multiple warnings
+   ```
+
+5. **Path considerations**: Make sure the `html-path` points to where your build process outputs HTML files.
 
 5. **Integration with existing workflows**: This action can be easily added to existing CI/CD pipelines.
 
