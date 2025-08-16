@@ -1,0 +1,67 @@
+name: Test Weekly Report Action
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/actions/weekly-report/**'
+      - '.github/workflows/test-weekly-report.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/actions/weekly-report/**'
+      - '.github/workflows/test-weekly-report.yml'
+  workflow_dispatch:
+
+jobs:
+  test-basic:
+    runs-on: ubuntu-latest
+    name: Test basic weekly report functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Run basic test
+        run: ./test/weekly-report/test-basic.sh
+
+  test-action-structure:
+    runs-on: ubuntu-latest
+    name: Test action structure and inputs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Validate action.yml
+        run: |
+          # Check that action.yml exists and has required fields
+          if [ ! -f ".github/actions/weekly-report/action.yml" ]; then
+            echo "❌ action.yml not found"
+            exit 1
+          fi
+          
+          # Check for required fields using basic grep
+          if ! grep -q "name:" .github/actions/weekly-report/action.yml; then
+            echo "❌ Missing name field"
+            exit 1
+          fi
+          
+          if ! grep -q "github-token:" .github/actions/weekly-report/action.yml; then
+            echo "❌ Missing github-token input"
+            exit 1
+          fi
+          
+          echo "✅ Action structure validation passed"
+      
+      - name: Test script exists and is executable
+        run: |
+          if [ ! -f ".github/actions/weekly-report/generate-report.sh" ]; then
+            echo "❌ generate-report.sh not found"
+            exit 1
+          fi
+          
+          if [ ! -x ".github/actions/weekly-report/generate-report.sh" ]; then
+            echo "❌ generate-report.sh is not executable"
+            exit 1
+          fi
+          
+          echo "✅ Script validation passed"
