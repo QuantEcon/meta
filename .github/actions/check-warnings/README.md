@@ -25,6 +25,18 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
 ```
 
+### Usage with Path Exclusion
+
+```yaml
+- name: Check for Python warnings excluding test files
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    exclude-paths: 'test/,examples/legacy/,temp/'
+    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    fail-on-warning: 'true'
+```
+
 ### Advanced Usage with PR Comments
 
 ```yaml
@@ -222,6 +234,7 @@ If you're only using the basic warning check functionality, only `contents: read
 | `create-artifact` | Whether to create a workflow artifact with the warning report | No | `false` |
 | `artifact-name` | Name for the workflow artifact containing the warning report | No | `warning-report` |
 | `notify` | GitHub username(s) to assign to the created issue (comma-separated for multiple users) | No | `` |
+| `exclude-paths` | Comma-separated list of paths to exclude from scanning (e.g., test/,docs/legacy/) | No | `` |
 
 ## Outputs
 
