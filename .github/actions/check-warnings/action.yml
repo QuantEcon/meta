@@ -10,7 +10,11 @@ inputs:
   warnings:
     description: 'Comma-separated list of warnings to check for'
     required: false
-    default: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    default: 'UserWarning,DeprecationWarning,PendingDeprecationWarning,SyntaxWarning,RuntimeWarning,FutureWarning,ImportWarning,UnicodeWarning,BytesWarning,ResourceWarning,EncodingWarning'
+  exclude-warning:
+    description: 'Comma-separated list of warnings to exclude from checking (can be a single warning or multiple warnings)'
+    required: false
+    default: ''
   fail-on-warning:
     description: 'Whether to fail the workflow if warnings are found'
     required: false
@@ -63,6 +67,7 @@ runs:
         # Parse inputs
         HTML_PATH="${{ inputs.html-path }}"
         WARNINGS="${{ inputs.warnings }}"
+        EXCLUDE_WARNINGS="${{ inputs.exclude-warning }}"
         FAIL_ON_WARNING="${{ inputs.fail-on-warning }}"
         
         echo "Scanning HTML files in: $HTML_PATH"
@@ -70,6 +75,46 @@ runs:
         
         # Convert comma-separated warnings to array
         IFS=',' read -ra WARNING_ARRAY <<< "$WARNINGS"
+        
+        # Handle exclude-warning parameter
+        if [ -n "$EXCLUDE_WARNINGS" ]; then
+          echo "Excluding warnings: $EXCLUDE_WARNINGS"
+          # Convert comma-separated exclude warnings to array
+          IFS=',' read -ra EXCLUDE_ARRAY <<< "$EXCLUDE_WARNINGS"
+          
+          # Create a new array with warnings not in exclude list
+          FILTERED_WARNING_ARRAY=()
+          for warning in "${WARNING_ARRAY[@]}"; do
+            # Remove leading/trailing whitespace from warning
+            warning=$(echo "$warning" | xargs)
+            exclude_warning=false
+            
+            # Check if this warning should be excluded
+            for exclude in "${EXCLUDE_ARRAY[@]}"; do
+              # Remove leading/trailing whitespace from exclude warning
+              exclude=$(echo "$exclude" | xargs)
+              if [ "$warning" = "$exclude" ]; then
+                exclude_warning=true
+                break
+              fi
+            done
+            
+            # Add to filtered array if not excluded
+            if [ "$exclude_warning" = false ]; then
+              FILTERED_WARNING_ARRAY+=("$warning")
+            fi
+          done
+          
+          # Replace WARNING_ARRAY with filtered array
+          WARNING_ARRAY=("${FILTERED_WARNING_ARRAY[@]}")
+          
+          # Show final warning list
+          if [ ${#WARNING_ARRAY[@]} -eq 0 ]; then
+            echo "⚠️  All warnings have been excluded. No warnings will be checked."
+          else
+            echo "Final warning list after exclusions: ${WARNING_ARRAY[*]}"
+          fi
+        fi
         
         # Initialize counters
         TOTAL_WARNINGS=0
@@ -149,6 +194,12 @@ runs:
         # Search for warnings in HTML files within cell_output elements
         for file in "${FILES[@]}"; do
           echo "Checking file: $file"
+          
+          # Skip warning check if no warnings to check for
+          if [ ${#WARNING_ARRAY[@]} -eq 0 ]; then
+            echo "No warnings to check for in $file (all excluded)"
+            continue
+          fi
           
           for warning in "${WARNING_ARRAY[@]}"; do
             # Remove leading/trailing whitespace from warning
