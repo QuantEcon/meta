@@ -6,32 +6,24 @@
 <body>
     <h1>Test Page</h1>
     
-    <!-- This should be detected - UserWarning in cell output -->
+    <!-- Single UserWarning -->
     <div class="cell_output">
-        <pre>/home/user/script.py:10: UserWarning: This is a test UserWarning message
-  result = some_function()
-</pre>
+        <pre>/home/user/script.py:10: UserWarning: This is a test message</pre>
     </div>
     
-    <!-- This should be detected - DeprecationWarning in cell output -->
+    <!-- Single DeprecationWarning -->
     <div class="cell_output">
-        <pre>/home/user/script.py:20: DeprecationWarning: This function is deprecated
-  old_function()
-</pre>
+        <pre>/home/user/script.py:20: DeprecationWarning: This function is deprecated</pre>
     </div>
     
-    <!-- This should be detected - RuntimeWarning in cell output -->
+    <!-- Single RuntimeWarning -->
     <div class="cell_output">
-        <pre>/home/user/script.py:30: RuntimeWarning: Invalid value encountered
-  result = compute()
-</pre>
+        <pre>/home/user/script.py:30: RuntimeWarning: Invalid value encountered</pre>
     </div>
     
-    <!-- This should be detected - ResourceWarning in cell output -->
+    <!-- Single ResourceWarning -->
     <div class="cell_output">
-        <pre>/home/user/script.py:40: ResourceWarning: unclosed file
-  f = open('file.txt')
-</pre>
+        <pre>/home/user/script.py:40: ResourceWarning: unclosed file</pre>
     </div>
     
     <!-- This should NOT be detected - warning in regular content -->
