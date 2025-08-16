@@ -6,6 +6,7 @@ GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
 ORGANIZATION="${INPUT_ORGANIZATION:-QuantEcon}"
 OUTPUT_FORMAT="${INPUT_OUTPUT_FORMAT:-markdown}"
 EXCLUDE_REPOS="${INPUT_EXCLUDE_REPOS:-}"
+API_DELAY="${INPUT_API_DELAY:-0}"  # Optional delay between API calls in seconds
 
 # Date calculations for last week
 WEEK_AGO=$(date -d "7 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -14,13 +15,64 @@ NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 echo "Generating weekly report for ${ORGANIZATION} organization"
 echo "Period: ${WEEK_AGO} to ${NOW}"
 
-# Function to make GitHub API calls
+# Function to make GitHub API calls with rate limit handling
 api_call() {
     local endpoint="$1"
     local page="${2:-1}"
-    curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
-         -H "Accept: application/vnd.github.v3+json" \
-         "https://api.github.com${endpoint}?page=${page}&per_page=100"
+    local max_retries=3
+    local retry_count=0
+    local delay="${API_DELAY:-0}"
+    
+    # Add delay between requests if specified
+    if [ "$delay" -gt 0 ]; then
+        sleep "$delay"
+    fi
+    
+    while [ $retry_count -lt $max_retries ]; do
+        local response=$(curl -s -w "\n%{http_code}" -H "Authorization: token ${GITHUB_TOKEN}" \
+                            -H "Accept: application/vnd.github.v3+json" \
+                            "https://api.github.com${endpoint}?page=${page}&per_page=100")
+        
+        local http_code=$(echo "$response" | tail -n1)
+        local body=$(echo "$response" | head -n -1)
+        
+        case "$http_code" in
+            200)
+                echo "$body"
+                return 0
+                ;;
+            403)
+                # Check if it's a rate limit error
+                if echo "$body" | jq -e '.message' 2>/dev/null | grep -q "rate limit"; then
+                    retry_count=$((retry_count + 1))
+                    if [ $retry_count -lt $max_retries ]; then
+                        local wait_time=$((retry_count * retry_count * 60))  # Exponential backoff: 1min, 4min, 9min
+                        echo "Rate limit exceeded for $endpoint. Waiting ${wait_time}s before retry $retry_count/$max_retries..." >&2
+                        sleep "$wait_time"
+                        continue
+                    else
+                        echo "Rate limit exceeded for $endpoint after $max_retries retries. Data will be incomplete." >&2
+                        echo '{"error": "rate_limit_exceeded", "message": "API rate limit exceeded"}'
+                        return 1
+                    fi
+                else
+                    echo "Access forbidden for $endpoint: $body" >&2
+                    echo '{"error": "forbidden", "message": "Access forbidden"}'
+                    return 1
+                fi
+                ;;
+            404)
+                echo "Repository not found: $endpoint" >&2
+                echo '{"error": "not_found", "message": "Repository not found"}'
+                return 1
+                ;;
+            *)
+                echo "API call failed for $endpoint with status $http_code: $body" >&2
+                echo '{"error": "api_error", "message": "API call failed"}'
+                return 1
+                ;;
+        esac
+    done
 }
 
 # Get repositories with recent activity using GitHub Search API
@@ -86,6 +138,8 @@ fi
 total_opened_issues=0
 total_closed_issues=0
 total_merged_prs=0
+failed_repos=0
+rate_limited_repos=0
 report_content=""
 
 # Start building the report
@@ -104,16 +158,43 @@ while IFS= read -r repo; do
     echo "Processing repository: $repo"
     
     # Count opened issues in the last week
-    opened_issues=$(api_call "/repos/${ORGANIZATION}/${repo}/issues" | \
-        jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.created_at >= $since and .pull_request == null)] | length else 0 end')
+    opened_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues")
+    if [ $? -eq 0 ]; then
+        opened_issues=$(echo "$opened_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.created_at >= $since and .pull_request == null)] | length else 0 end')
+    else
+        opened_issues=0
+        if echo "$opened_response" | jq -e '.error' 2>/dev/null | grep -q "rate_limit"; then
+            rate_limited_repos=$((rate_limited_repos + 1))
+        else
+            failed_repos=$((failed_repos + 1))
+        fi
+    fi
     
     # Count closed issues in the last week
-    closed_issues=$(api_call "/repos/${ORGANIZATION}/${repo}/issues?state=closed" | \
-        jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.closed_at != null and .closed_at >= $since and .pull_request == null)] | length else 0 end')
+    closed_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues?state=closed")
+    if [ $? -eq 0 ]; then
+        closed_issues=$(echo "$closed_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.closed_at != null and .closed_at >= $since and .pull_request == null)] | length else 0 end')
+    else
+        closed_issues=0
+        if echo "$closed_response" | jq -e '.error' 2>/dev/null | grep -q "rate_limit"; then
+            rate_limited_repos=$((rate_limited_repos + 1))
+        else
+            failed_repos=$((failed_repos + 1))
+        fi
+    fi
     
     # Count merged PRs in the last week
-    merged_prs=$(api_call "/repos/${ORGANIZATION}/${repo}/pulls?state=closed" | \
-        jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.merged_at != null and .merged_at >= $since)] | length else 0 end')
+    prs_response=$(api_call "/repos/${ORGANIZATION}/${repo}/pulls?state=closed")
+    if [ $? -eq 0 ]; then
+        merged_prs=$(echo "$prs_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.merged_at != null and .merged_at >= $since)] | length else 0 end')
+    else
+        merged_prs=0
+        if echo "$prs_response" | jq -e '.error' 2>/dev/null | grep -q "rate_limit"; then
+            rate_limited_repos=$((rate_limited_repos + 1))
+        else
+            failed_repos=$((failed_repos + 1))
+        fi
+    fi
     
     # Handle null/empty values
     opened_issues=${opened_issues:-0}
@@ -141,7 +222,21 @@ if [ "$OUTPUT_FORMAT" = "markdown" ]; then
     report_content+="- **Total Repositories Checked:** $(echo "$repo_names" | wc -l)\n"
     report_content+="- **Total Issues Opened:** $total_opened_issues\n"
     report_content+="- **Total Issues Closed:** $total_closed_issues\n"
-    report_content+="- **Total PRs Merged:** $total_merged_prs\n\n"
+    report_content+="- **Total PRs Merged:** $total_merged_prs\n"
+    
+    # Add warnings about incomplete data if any API calls failed
+    if [ $rate_limited_repos -gt 0 ] || [ $failed_repos -gt 0 ]; then
+        report_content+="\n### ⚠️ Data Completeness Warnings\n\n"
+        if [ $rate_limited_repos -gt 0 ]; then
+            report_content+="- **Rate Limited:** $rate_limited_repos API calls hit rate limits. Data may be incomplete.\n"
+        fi
+        if [ $failed_repos -gt 0 ]; then
+            report_content+="- **Failed Requests:** $failed_repos API calls failed. Data may be incomplete.\n"
+        fi
+        report_content+="\n*Consider adding API delays or running during off-peak hours to avoid rate limits.*\n"
+    fi
+    
+    report_content+="\n"
     report_content+="*Report generated on $(date) by QuantEcon Weekly Report Action*\n"
 fi
 

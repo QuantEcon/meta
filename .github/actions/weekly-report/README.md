@@ -14,6 +14,8 @@ This action generates a report containing:
 - **Smart repository filtering**: Uses GitHub Search API to identify repositories with recent activity (commits in the last 7 days) before checking for issues and PRs
 - **Fallback mechanism**: If no repositories are found with recent commits, falls back to checking all organization repositories to ensure complete coverage
 - **Activity-based reporting**: Only includes repositories with actual activity in the generated report
+- **Rate limit handling**: Automatically retries on rate limit errors with exponential backoff, and provides clear warnings when data is incomplete
+- **Configurable delays**: Optional delays between API calls to reduce rate limit pressure
 
 ## Usage
 
@@ -25,6 +27,7 @@ This action generates a report containing:
     organization: 'QuantEcon'
     output-format: 'markdown'
     exclude-repos: 'lecture-python.notebooks,auto-updated-repo'
+    api-delay: '1'  # Add 1 second delay between API calls to avoid rate limits
 ```
 
 ## Inputs
@@ -35,6 +38,7 @@ This action generates a report containing:
 | `organization` | GitHub organization name | No | `QuantEcon` |
 | `output-format` | Output format (`markdown` or `json`) | No | `markdown` |
 | `exclude-repos` | Comma-separated list of repository names to exclude from the report | No | `''` |
+| `api-delay` | Delay in seconds between API calls to avoid rate limits (0 = no delay) | No | `0` |
 
 ## Outputs
 
@@ -59,6 +63,16 @@ See the [weekly report workflow](../../workflows/weekly-report.yml) for a comple
 The generated markdown report includes:
 - A summary table showing activity by repository
 - Total counts across all repositories
+- Data completeness warnings if API calls failed due to rate limits or other errors
 - Report metadata (generation date, period covered)
 
 Only repositories with activity in the reporting period are included in the detailed table.
+
+## Rate Limiting
+
+GitHub's API has rate limits (5000 requests/hour for authenticated requests). For large organizations:
+
+- **Monitor warnings**: The report will include warnings when rate limits are hit
+- **Add delays**: Use the `api-delay` parameter to add delays between requests (e.g., `api-delay: '1'` for 1 second delays)
+- **Run during off-peak**: Schedule reports during off-peak hours to avoid conflicts with other API usage
+- **Incomplete data**: When rate limited, the report will show `0` for affected repositories and include a warning
