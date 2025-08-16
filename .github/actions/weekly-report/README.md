@@ -10,6 +10,11 @@ This action generates a report containing:
 - Number of PRs merged by repository (last 7 days)
 - Summary totals across all repositories
 
+### Efficiency Features
+- **Smart repository filtering**: Uses GitHub Search API to identify repositories with recent activity (commits in the last 7 days) before checking for issues and PRs
+- **Fallback mechanism**: If no repositories are found with recent commits, falls back to checking all organization repositories to ensure complete coverage
+- **Activity-based reporting**: Only includes repositories with actual activity in the generated report
+
 ## Usage
 
 ```yaml

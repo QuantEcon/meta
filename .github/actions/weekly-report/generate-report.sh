@@ -22,14 +22,34 @@ api_call() {
          "https://api.github.com${endpoint}?page=${page}&per_page=100"
 }
 
-# Get all repositories in the organization
-echo "Fetching repositories for ${ORGANIZATION}..."
-repos_response=$(api_call "/orgs/${ORGANIZATION}/repos")
-repo_names=$(echo "$repos_response" | jq -r '.[].name // empty')
+# Get repositories with recent activity using GitHub Search API
+echo "Fetching repositories with recent activity for ${ORGANIZATION}..."
 
+# Search for repositories with recent commits, issues, or PRs in the last week
+WEEK_AGO_DATE=$(date -d "7 days ago" -u +"%Y-%m-%d")
+
+# Use search API to find repos with recent activity
+search_query="org:${ORGANIZATION} pushed:>${WEEK_AGO_DATE}"
+search_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                       -H "Accept: application/vnd.github.v3+json" \
+                       "https://api.github.com/search/repositories?q=$(echo "$search_query" | sed 's/ /%20/g')&per_page=100")
+
+repo_names=$(echo "$search_response" | jq -r '.items[]?.name // empty')
+
+# If no repos found with recent commits, fall back to checking all org repos
+# This ensures we don't miss repos that might have issues/PRs but no commits
 if [ -z "$repo_names" ]; then
-    echo "No repositories found or API call failed"
-    exit 1
+    echo "No repositories found with recent commits, checking all organization repositories..."
+    repos_response=$(api_call "/orgs/${ORGANIZATION}/repos")
+    repo_names=$(echo "$repos_response" | jq -r '.[].name // empty')
+    
+    if [ -z "$repo_names" ]; then
+        echo "No repositories found or API call failed"
+        exit 1
+    fi
+else
+    echo "Found repositories with recent activity:"
+    echo "$repo_names" | head -10  # Show first 10 for logging
 fi
 
 # Initialize report variables
