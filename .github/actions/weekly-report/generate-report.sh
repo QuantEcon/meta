@@ -288,12 +288,19 @@ echo "DEBUG: Summary: $summary"
 # Set outputs
 if [ -n "$GITHUB_OUTPUT" ]; then
     echo "DEBUG: Writing to GITHUB_OUTPUT file"
-    echo "report-content<<EOF" >> "$GITHUB_OUTPUT"
+    echo "DEBUG: Content preview (first 100 chars): ${report_content:0:100}"
+    echo "DEBUG: Summary preview: $summary"
+    
+    # Use a unique delimiter to avoid conflicts with content
+    delimiter="QUANTECON_REPORT_END_$(date +%s)"
+    echo "report-content<<${delimiter}" >> "$GITHUB_OUTPUT"
     echo "$report_content" >> "$GITHUB_OUTPUT"
-    echo "EOF" >> "$GITHUB_OUTPUT"
+    echo "${delimiter}" >> "$GITHUB_OUTPUT"
     
     echo "report-summary=$summary" >> "$GITHUB_OUTPUT"
+    
     echo "DEBUG: Outputs written to GITHUB_OUTPUT"
+    echo "DEBUG: GITHUB_OUTPUT file size: $(wc -c < "$GITHUB_OUTPUT")"
 else
     echo "ERROR: GITHUB_OUTPUT environment variable not set!"
 fi
