@@ -35,10 +35,6 @@ inputs:
     description: 'GitHub username(s) to assign to the created issue (comma-separated for multiple users)'
     required: false
     default: ''
-  exclude-paths:
-    description: 'Comma-separated list of paths to exclude from scanning (e.g., test/,docs/legacy/)'
-    required: false
-    default: ''
 
 outputs:
   warnings-found:
@@ -68,11 +64,9 @@ runs:
         HTML_PATH="${{ inputs.html-path }}"
         WARNINGS="${{ inputs.warnings }}"
         FAIL_ON_WARNING="${{ inputs.fail-on-warning }}"
-        EXCLUDE_PATHS="${{ inputs.exclude-paths }}"
         
         echo "Scanning HTML files in: $HTML_PATH"
         echo "Looking for warnings: $WARNINGS"
-        echo "Excluded paths: $EXCLUDE_PATHS"
         
         # Convert comma-separated warnings to array
         IFS=',' read -ra WARNING_ARRAY <<< "$WARNINGS"
@@ -102,31 +96,6 @@ runs:
         else
           # Directory - find all HTML files
           mapfile -d '' FILES < <(find "$HTML_PATH" -name "*.html" -type f -print0)
-        fi
-        
-        # Filter out excluded paths if any are specified
-        if [ -n "$EXCLUDE_PATHS" ]; then
-          IFS=',' read -ra EXCLUDE_ARRAY <<< "$EXCLUDE_PATHS"
-          FILTERED_FILES=()
-          
-          for file in "${FILES[@]}"; do
-            EXCLUDE_FILE=false
-            for exclude_path in "${EXCLUDE_ARRAY[@]}"; do
-              # Remove leading/trailing whitespace from exclude path
-              exclude_path=$(echo "$exclude_path" | xargs)
-              if [[ "$file" == *"$exclude_path"* ]]; then
-                echo "Excluding file: $file (matches exclude path: $exclude_path)"
-                EXCLUDE_FILE=true
-                break
-              fi
-            done
-            
-            if [ "$EXCLUDE_FILE" = false ]; then
-              FILTERED_FILES+=("$file")
-            fi
-          done
-          
-          FILES=("${FILTERED_FILES[@]}")
         fi
         
         # Create temporary Python script for parsing HTML
