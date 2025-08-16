@@ -1,12 +1,17 @@
 #!/bin/bash
 set -e
 
+echo "DEBUG: Starting weekly report generation"
+echo "DEBUG: Environment check - GITHUB_OUTPUT: ${GITHUB_OUTPUT:-NOT_SET}"
+
 # Get inputs
 GITHUB_TOKEN="${INPUT_GITHUB_TOKEN}"
 ORGANIZATION="${INPUT_ORGANIZATION:-QuantEcon}"
 OUTPUT_FORMAT="${INPUT_OUTPUT_FORMAT:-markdown}"
 EXCLUDE_REPOS="${INPUT_EXCLUDE_REPOS:-}"
 API_DELAY="${INPUT_API_DELAY:-0}"  # Optional delay between API calls in seconds
+
+echo "DEBUG: Inputs - ORG: $ORGANIZATION, FORMAT: $OUTPUT_FORMAT, EXCLUDE: $EXCLUDE_REPOS"
 
 # Date calculations for last week
 WEEK_AGO=$(date -d "7 days ago" -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -160,11 +165,14 @@ if [ "$OUTPUT_FORMAT" = "markdown" ]; then
 
 | Repository | Opened Issues | Closed Issues | Merged PRs |
 |------------|---------------|---------------|------------|"
+    echo "DEBUG: Initial report content set, length: ${#report_content}"
 fi
 
 # Process each repository
+repo_count=0
 while IFS= read -r repo; do
     [ -z "$repo" ] && continue
+    repo_count=$((repo_count + 1))
     
     echo "Processing repository: $repo"
     
@@ -227,6 +235,9 @@ while IFS= read -r repo; do
     
 done <<< "$repo_names"
 
+echo "DEBUG: Processed $repo_count repositories"
+echo "DEBUG: Final report content length: ${#report_content}"
+
 # Add summary to report
 if [ "$OUTPUT_FORMAT" = "markdown" ]; then
     report_content="${report_content}
@@ -269,12 +280,23 @@ summary="Week Summary: $total_opened_issues issues opened, $total_closed_issues 
 # Save report to file
 echo "$report_content" > weekly-report.md
 
-# Set outputs
-echo "report-content<<EOF" >> $GITHUB_OUTPUT
-echo "$report_content" >> $GITHUB_OUTPUT
-echo "EOF" >> $GITHUB_OUTPUT
+# Debug: Check if GITHUB_OUTPUT is set and accessible
+echo "DEBUG: GITHUB_OUTPUT environment variable: ${GITHUB_OUTPUT:-NOT_SET}"
+echo "DEBUG: Report content length: ${#report_content}"
+echo "DEBUG: Summary: $summary"
 
-echo "report-summary=$summary" >> $GITHUB_OUTPUT
+# Set outputs
+if [ -n "$GITHUB_OUTPUT" ]; then
+    echo "DEBUG: Writing to GITHUB_OUTPUT file"
+    echo "report-content<<EOF" >> "$GITHUB_OUTPUT"
+    echo "$report_content" >> "$GITHUB_OUTPUT"
+    echo "EOF" >> "$GITHUB_OUTPUT"
+    
+    echo "report-summary=$summary" >> "$GITHUB_OUTPUT"
+    echo "DEBUG: Outputs written to GITHUB_OUTPUT"
+else
+    echo "ERROR: GITHUB_OUTPUT environment variable not set!"
+fi
 
 echo "Weekly report generated successfully!"
 echo "Summary: $summary"
