@@ -1,0 +1,33 @@
+name: 'QuantEcon Weekly Report'
+description: 'Generate a weekly report of issues and PRs across QuantEcon repositories'
+author: 'QuantEcon'
+
+inputs:
+  github-token:
+    description: 'GitHub token with access to the QuantEcon organization'
+    required: true
+  organization:
+    description: 'GitHub organization name'
+    required: false
+    default: 'QuantEcon'
+  output-format:
+    description: 'Output format for the report (markdown, json)'
+    required: false
+    default: 'markdown'
+
+outputs:
+  report-content:
+    description: 'The generated weekly report content'
+  report-summary:
+    description: 'A brief summary of the report metrics'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate weekly report
+      shell: bash
+      run: ${{ github.action_path }}/generate-report.sh
+      env:
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_ORGANIZATION: ${{ inputs.organization }}
+        INPUT_OUTPUT_FORMAT: ${{ inputs.output-format }}
