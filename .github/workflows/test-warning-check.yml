@@ -3,8 +3,16 @@ name: Test Warning Check Action
 on:
   push:
     branches: [ main ]
+    paths:
+      - '.github/actions/check-warnings/**'
+      - 'test/check-warnings/**'
+      - '.github/workflows/test-warning-check.yml'
   pull_request:
     branches: [ main ]
+    paths:
+      - '.github/actions/check-warnings/**'
+      - 'test/check-warnings/**'
+      - '.github/workflows/test-warning-check.yml'
   workflow_dispatch:
 
 jobs:
