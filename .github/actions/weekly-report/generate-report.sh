@@ -152,11 +152,14 @@ report_content=""
 
 # Start building the report
 if [ "$OUTPUT_FORMAT" = "markdown" ]; then
-    report_content="# QuantEcon Weekly Report\n\n"
-    report_content+="**Report Period:** $(date -d "$WEEK_AGO" '+%B %d, %Y') - $(date -d "$NOW" '+%B %d, %Y')\n\n"
-    report_content+="## Summary\n\n"
-    report_content+="| Repository | Opened Issues | Closed Issues | Merged PRs |\n"
-    report_content+="|------------|---------------|---------------|------------|\n"
+    report_content="# QuantEcon Weekly Report
+
+**Report Period:** $(date -d "$WEEK_AGO" '+%B %d, %Y') - $(date -d "$NOW" '+%B %d, %Y')
+
+## Summary
+
+| Repository | Opened Issues | Closed Issues | Merged PRs |
+|------------|---------------|---------------|------------|"
 fi
 
 # Process each repository
@@ -217,7 +220,8 @@ while IFS= read -r repo; do
     # Add to report if there's activity
     if [ $((opened_issues + closed_issues + merged_prs)) -gt 0 ]; then
         if [ "$OUTPUT_FORMAT" = "markdown" ]; then
-            report_content+="| $repo | $opened_issues | $closed_issues | $merged_prs |\n"
+            report_content="${report_content}
+| $repo | $opened_issues | $closed_issues | $merged_prs |"
         fi
     fi
     
@@ -225,38 +229,49 @@ done <<< "$repo_names"
 
 # Add summary to report
 if [ "$OUTPUT_FORMAT" = "markdown" ]; then
-    report_content+="|**Total**|**$total_opened_issues**|**$total_closed_issues**|**$total_merged_prs**|\n\n"
-    report_content+="## Details\n\n"
-    report_content+="- **Total Repositories Checked:** $(echo "$repo_names" | wc -l)\n"
-    report_content+="- **Total Issues Opened:** $total_opened_issues\n"
-    report_content+="- **Total Issues Closed:** $total_closed_issues\n"
-    report_content+="- **Total PRs Merged:** $total_merged_prs\n"
+    report_content="${report_content}
+|**Total**|**$total_opened_issues**|**$total_closed_issues**|**$total_merged_prs**|
+
+## Details
+
+- **Total Repositories Checked:** $(echo "$repo_names" | wc -l)
+- **Total Issues Opened:** $total_opened_issues
+- **Total Issues Closed:** $total_closed_issues
+- **Total PRs Merged:** $total_merged_prs"
     
     # Add warnings about incomplete data if any API calls failed
     if [ $rate_limited_repos -gt 0 ] || [ $failed_repos -gt 0 ]; then
-        report_content+="\n### ⚠️ Data Completeness Warnings\n\n"
+        report_content="${report_content}
+
+### ⚠️ Data Completeness Warnings
+"
         if [ $rate_limited_repos -gt 0 ]; then
-            report_content+="- **Rate Limited:** $rate_limited_repos API calls hit rate limits. Data may be incomplete.\n"
+            report_content="${report_content}
+- **Rate Limited:** $rate_limited_repos API calls hit rate limits. Data may be incomplete."
         fi
         if [ $failed_repos -gt 0 ]; then
-            report_content+="- **Failed Requests:** $failed_repos API calls failed. Data may be incomplete.\n"
+            report_content="${report_content}
+- **Failed Requests:** $failed_repos API calls failed. Data may be incomplete."
         fi
-        report_content+="\n*Consider adding API delays or running during off-peak hours to avoid rate limits.*\n"
+        report_content="${report_content}
+
+*Consider adding API delays or running during off-peak hours to avoid rate limits.*"
     fi
     
-    report_content+="\n"
-    report_content+="*Report generated on $(date) by QuantEcon Weekly Report Action*\n"
+    report_content="${report_content}
+
+*Report generated on $(date) by QuantEcon Weekly Report Action*"
 fi
 
 # Create summary
 summary="Week Summary: $total_opened_issues issues opened, $total_closed_issues issues closed, $total_merged_prs PRs merged"
 
 # Save report to file
-echo -e "$report_content" > weekly-report.md
+echo "$report_content" > weekly-report.md
 
 # Set outputs
 echo "report-content<<EOF" >> $GITHUB_OUTPUT
-echo -e "$report_content" >> $GITHUB_OUTPUT
+echo "$report_content" >> $GITHUB_OUTPUT
 echo "EOF" >> $GITHUB_OUTPUT
 
 echo "report-summary=$summary" >> $GITHUB_OUTPUT
