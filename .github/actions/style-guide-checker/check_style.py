@@ -347,25 +347,32 @@ Limit to {self.max_suggestions} suggestions maximum.
         suggestions = []
         lines = content.split('\n')
         
-        # Rule 1: Check for Greek letter usage
+        # Rule 1: Check for Greek letter usage in code contexts
         greek_replacements = {
             'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'delta': 'δ',
             'epsilon': 'ε', 'sigma': 'σ', 'theta': 'θ', 'rho': 'ρ'
         }
         
         for i, line in enumerate(lines):
-            for english, unicode_char in greek_replacements.items():
-                if f'{english}' in line.lower() and english in line:
-                    suggestion = StyleSuggestion(
-                        file_path=file_path,
-                        line_number=i + 1,
-                        original_text=line,
-                        suggested_text=line.replace(english, unicode_char),
-                        explanation=f"Use Unicode {unicode_char} instead of '{english}' for better mathematical notation",
-                        confidence=ConfidenceLevel.HIGH,
-                        rule_category="variable_naming"
-                    )
-                    suggestions.append(suggestion)
+            # Only check lines that contain code (function definitions, equations)
+            if ('def ' in line or '=' in line) and any(f'{english}' in line for english in greek_replacements.keys()):
+                for english, unicode_char in greek_replacements.items():
+                    # Look for the English word as a standalone parameter/variable
+                    import re
+                    pattern = r'\b' + english + r'\b'
+                    if re.search(pattern, line):
+                        new_line = re.sub(pattern, unicode_char, line)
+                        if new_line != line:
+                            suggestion = StyleSuggestion(
+                                file_path=file_path,
+                                line_number=i + 1,
+                                original_text=line.strip(),
+                                suggested_text=new_line.strip(),
+                                explanation=f"Use Unicode {unicode_char} instead of '{english}' for better mathematical notation",
+                                confidence=ConfidenceLevel.HIGH,
+                                rule_category="variable_naming"
+                            )
+                            suggestions.append(suggestion)
                     
         # Rule 2: Check for capitalization in headings
         for i, line in enumerate(lines):
@@ -434,11 +441,14 @@ Limit to {self.max_suggestions} suggestions maximum.
                 for suggestion in suggestions_list:
                     if suggestion.line_number <= len(lines):
                         line_idx = suggestion.line_number - 1
-                        if lines[line_idx].strip() == suggestion.original_text.strip():
+                        current_line = lines[line_idx]
+                        # Only apply if the original text matches (trimmed for safety)
+                        if current_line.strip() == suggestion.original_text or suggestion.original_text in current_line:
                             lines[line_idx] = suggestion.suggested_text
                             changes_made += 1
                             self.logger.info(f"Applied change to {file_path}:{suggestion.line_number}")
-                            
+                        else:
+                            self.logger.warning(f"Skipping change to {file_path}:{suggestion.line_number} - line content doesn't match")
                 # Write back to file
                 with open(file_path, 'w') as f:
                     f.write('\n'.join(lines))
