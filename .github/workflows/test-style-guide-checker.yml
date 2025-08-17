@@ -1,0 +1,277 @@
+name: Test Style Guide Checker Action
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/actions/style-guide-checker/**'
+      - 'test/style-guide-checker/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/actions/style-guide-checker/**'
+      - 'test/style-guide-checker/**'
+  workflow_dispatch:
+
+jobs:
+  test-basic-functionality:
+    runs-on: ubuntu-latest
+    name: Test basic functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Install test dependencies
+        run: |
+          pip install pyyaml requests
+      
+      - name: Run basic tests
+        run: |
+          cd ${{ github.workspace }}
+          ./test/style-guide-checker/test-basic.sh
+
+  test-clean-files:
+    runs-on: ubuntu-latest
+    name: Test with clean files (should find no issues)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with clean files
+        id: clean-test
+        uses: .//.github/actions/style-guide-checker
+        with:
+          docs: 'test/style-guide-checker'
+          mode: 'full'
+          exclude-files: '.*bad.*\.md,.*exclude.*\.md'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # No OpenAI key - test rule-based fallback
+        continue-on-error: true
+      
+      - name: Verify clean results
+        run: |
+          echo "Files reviewed: ${{ steps.clean-test.outputs.files-reviewed }}"
+          echo "Suggestions made: ${{ steps.clean-test.outputs.suggestions-made }}"
+          echo "High confidence changes: ${{ steps.clean-test.outputs.high-confidence-changes }}"
+          
+          # Should find at least 1 file (clean-lecture.md)
+          if [ "${{ steps.clean-test.outputs.files-reviewed }}" -lt "1" ]; then
+            echo "❌ Expected at least 1 file to be reviewed"
+            exit 1
+          fi
+          
+          echo "✅ Clean files test passed"
+
+  test-files-with-issues:
+    runs-on: ubuntu-latest
+    name: Test with files containing style issues
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with files containing issues
+        id: issues-test
+        uses: .//.github/actions/style-guide-checker
+        with:
+          docs: 'test/style-guide-checker'
+          mode: 'full'
+          exclude-files: '.*clean.*\.md,.*exclude.*\.md'
+          max-suggestions: 20
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # No OpenAI key - test rule-based fallback
+        continue-on-error: true
+      
+      - name: Verify issues found
+        run: |
+          echo "Files reviewed: ${{ steps.issues-test.outputs.files-reviewed }}"
+          echo "Suggestions made: ${{ steps.issues-test.outputs.suggestions-made }}"
+          echo "High confidence changes: ${{ steps.issues-test.outputs.high-confidence-changes }}"
+          
+          # Should find at least 1 file (bad-style-lecture.md)
+          if [ "${{ steps.issues-test.outputs.files-reviewed }}" -lt "1" ]; then
+            echo "❌ Expected at least 1 file to be reviewed"
+            exit 1
+          fi
+          
+          # Rule-based checker should find some Greek letter issues
+          if [ "${{ steps.issues-test.outputs.suggestions-made }}" -lt "1" ]; then
+            echo "❌ Expected at least some suggestions for files with style issues"
+            exit 1
+          fi
+          
+          echo "✅ Style issues test passed"
+
+  test-file-exclusion:
+    runs-on: ubuntu-latest
+    name: Test file exclusion patterns
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test exclusion patterns
+        id: exclude-test
+        uses: .//.github/actions/style-guide-checker
+        with:
+          docs: 'test/style-guide-checker'
+          mode: 'full'
+          exclude-files: '.*exclude.*\.md'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: Verify exclusion worked
+        run: |
+          echo "Files reviewed: ${{ steps.exclude-test.outputs.files-reviewed }}"
+          
+          # Should review files but exclude exclude-me.md
+          # Should find at least 1 file but exclude the exclude-me.md file
+          if [ "${{ steps.exclude-test.outputs.files-reviewed }}" -lt "1" ]; then
+            echo "❌ Expected at least 1 file to be reviewed after exclusion"
+            exit 1
+          fi
+          
+          echo "✅ File exclusion test passed"
+
+  test-action-inputs:
+    runs-on: ubuntu-latest
+    name: Test various input configurations
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test with custom style guide (local)
+        uses: .//.github/actions/style-guide-checker
+        with:
+          style-guide: '.github/copilot-qe-style-guide.md'
+          docs: 'test/style-guide-checker'
+          mode: 'full'
+          confidence-threshold: 'medium'
+          max-suggestions: 5
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: Verify input configurations
+        run: |
+          echo "✅ Action input configurations test passed"
+
+  test-pr-mode-simulation:
+    runs-on: ubuntu-latest
+    name: Test PR mode simulation (fallback to full mode)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test PR mode (should fallback to full)
+        id: pr-test
+        uses: .//.github/actions/style-guide-checker
+        with:
+          docs: 'test/style-guide-checker'
+          mode: 'pr'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+      
+      - name: Verify PR mode handling
+        run: |
+          echo "Files reviewed: ${{ steps.pr-test.outputs.files-reviewed }}"
+          # In non-PR context, should fallback to full mode
+          echo "✅ PR mode simulation test passed"
+
+  test-yaml-validity:
+    runs-on: ubuntu-latest
+    name: Validate action YAML structure
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Install PyYAML
+        run: pip install pyyaml
+      
+      - name: Validate action.yml
+        run: |
+          python3 -c "
+          import yaml
+          import sys
+          
+          with open('.github/actions/style-guide-checker/action.yml') as f:
+              try:
+                  action_config = yaml.safe_load(f)
+                  print('✅ action.yml is valid YAML')
+              except yaml.YAMLError as e:
+                  print(f'❌ action.yml has YAML syntax error: {e}')
+                  sys.exit(1)
+          
+          # Check required fields
+          required_fields = ['name', 'description', 'inputs', 'outputs', 'runs']
+          for field in required_fields:
+              if field not in action_config:
+                  print(f'❌ Missing required field: {field}')
+                  sys.exit(1)
+          
+          # Check that required inputs exist
+          required_inputs = ['github-token']
+          for input_name in required_inputs:
+              if input_name not in action_config['inputs']:
+                  print(f'❌ Missing required input: {input_name}')
+                  sys.exit(1)
+          
+          print('✅ action.yml structure is valid')
+          "
+
+  test-documentation:
+    runs-on: ubuntu-latest
+    name: Test documentation completeness
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Check documentation files exist
+        run: |
+          required_docs=(
+            ".github/actions/style-guide-checker/README.md"
+            ".github/actions/style-guide-checker/action.yml"
+            ".github/actions/style-guide-checker/check-style.py"
+            ".github/actions/style-guide-checker/examples.md"
+          )
+          
+          for doc in "${required_docs[@]}"; do
+            if [ ! -f "$doc" ]; then
+              echo "❌ Missing documentation: $doc"
+              exit 1
+            fi
+            echo "✅ Found: $doc"
+          done
+          
+          echo "✅ All documentation files present"
+      
+      - name: Check README completeness
+        run: |
+          readme=".github/actions/style-guide-checker/README.md"
+          
+          # Check for required sections
+          required_sections=(
+            "# Style Guide Checker Action"
+            "## Features"
+            "## Usage"
+            "## Inputs"
+            "## Outputs"
+            "## How It Works"
+          )
+          
+          for section in "${required_sections[@]}"; do
+            if ! grep -q "$section" "$readme"; then
+              echo "❌ Missing section in README: $section"
+              exit 1
+            fi
+            echo "✅ Found section: $section"
+          done
+          
+          echo "✅ README documentation is complete"

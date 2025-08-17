@@ -1,0 +1,99 @@
+name: 'Style Guide Checker'
+description: 'AI-powered style guide compliance checker for QuantEcon lectures using MyST Markdown'
+author: 'QuantEcon'
+
+inputs:
+  style-guide:
+    description: 'Path to the style guide document (local path or URL)'
+    required: false
+    default: '.github/copilot-qe-style-guide.md'
+  docs:
+    description: 'Path to the documents/lectures directory'
+    required: false
+    default: 'lectures'
+  exclude-files:
+    description: 'Comma-separated list of file patterns to exclude (supports regex)'
+    required: false
+    default: ''
+  mode:
+    description: 'Operating mode: "pr" for PR review, "full" for complete review'
+    required: false
+    default: 'pr'
+  confidence-threshold:
+    description: 'Minimum confidence level for auto-commits (high, medium, low)'
+    required: false
+    default: 'high'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+  openai-api-key:
+    description: 'OpenAI API key for AI-powered style checking'
+    required: false
+    default: ''
+  max-suggestions:
+    description: 'Maximum number of suggestions to make per file'
+    required: false
+    default: '10'
+  create-pr:
+    description: 'Whether to create a PR for scheduled mode (true/false)'
+    required: false
+    default: 'true'
+
+outputs:
+  files-reviewed:
+    description: 'Number of files reviewed'
+    value: ${{ steps.check.outputs.files-reviewed }}
+  suggestions-made:
+    description: 'Total number of suggestions made'
+    value: ${{ steps.check.outputs.suggestions-made }}
+  high-confidence-changes:
+    description: 'Number of high confidence changes auto-committed'
+    value: ${{ steps.check.outputs.high-confidence-changes }}
+  pr-url:
+    description: 'URL of created PR (in scheduled mode)'
+    value: ${{ steps.check.outputs.pr-url }}
+  review-summary:
+    description: 'Summary of the style review'
+    value: ${{ steps.check.outputs.review-summary }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install requests openai PyGithub gitpython
+
+    - name: Run style guide checker
+      id: check
+      shell: bash
+      run: |
+        python3 ${{ github.action_path }}/check_style.py
+      env:
+        INPUT_STYLE_GUIDE: ${{ inputs.style-guide }}
+        INPUT_DOCS: ${{ inputs.docs }}
+        INPUT_EXCLUDE_FILES: ${{ inputs.exclude-files }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_CONFIDENCE_THRESHOLD: ${{ inputs.confidence-threshold }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_OPENAI_API_KEY: ${{ inputs.openai-api-key }}
+        INPUT_MAX_SUGGESTIONS: ${{ inputs.max-suggestions }}
+        INPUT_CREATE_PR: ${{ inputs.create-pr }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_HEAD_REF: ${{ github.head_ref }}
+        GITHUB_BASE_REF: ${{ github.base_ref }}
+        GITHUB_SHA: ${{ github.sha }}
+        GITHUB_REF: ${{ github.ref }}
+        GITHUB_ACTOR: ${{ github.actor }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+
+branding:
+  icon: 'check-circle'
+  color: 'green'

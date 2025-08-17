@@ -44,3 +44,24 @@ A GitHub Action that generates a weekly report summarizing issues and PR activit
 **Use case**: Automated weekly reporting on repository activity including opened/closed issues and merged PRs. Runs automatically every Saturday and creates an issue with the report.
 
 See the [action documentation](./.github/actions/weekly-report/README.md) for detailed usage instructions and examples.
+
+### Style Guide Checker Action
+
+A GitHub Action that uses AI to review QuantEcon lectures for compliance with the QuantEcon Style Guide and automatically suggests or applies improvements.
+
+**Location**: `.github/actions/style-guide-checker`
+
+**Usage**:
+```yaml
+- name: Style guide review
+  uses: QuantEcon/meta/.github/actions/style-guide-checker@main
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+    docs: 'lectures'
+    mode: 'pr'
+```
+
+**Use case**: AI-powered style guide compliance checking for lectures with confidence-based automatic fixes and human review suggestions. Supports both PR mode (changed files only) and scheduled mode (full repository review).
+
+See the [action documentation](./.github/actions/style-guide-checker/README.md) for detailed usage instructions and examples.
