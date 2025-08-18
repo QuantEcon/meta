@@ -238,7 +238,7 @@ jobs:
           required_docs=(
             ".github/actions/style-guide-checker/README.md"
             ".github/actions/style-guide-checker/action.yml"
-            ".github/actions/style-guide-checker/check-style.py"
+            ".github/actions/style-guide-checker/check_style.py"
             ".github/actions/style-guide-checker/examples.md"
           )
           
