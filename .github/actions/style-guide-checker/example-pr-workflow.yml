@@ -1,5 +1,6 @@
-# Example workflow for PR style review
-name: Style Guide Review
+# Example workflow for automatic PR style review
+# This runs automatically when lecture files are changed
+name: Style Guide Review (Automatic)
 
 on:
   pull_request:

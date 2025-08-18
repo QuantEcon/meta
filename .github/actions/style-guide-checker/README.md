@@ -16,10 +16,63 @@ A GitHub Action that uses AI to review QuantEcon lectures for compliance with th
 
 ## Usage
 
-### Basic Usage (PR Mode)
+### Comment-Based Trigger (Recommended)
+
+The most user-friendly way to use this action is with comment-based triggering. Users can trigger style guide reviews by commenting on a PR with specific trigger phrases:
 
 ```yaml
-name: Style Guide Review
+name: Style Guide Review (Comment Triggered)
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  check-trigger:
+    if: github.event.issue.pull_request && (contains(github.event.comment.body, '/style-check') || contains(github.event.comment.body, '@quantecon-style-guide'))
+    runs-on: ubuntu-latest
+    name: Parse Comment Trigger
+    outputs:
+      should-run: ${{ steps.parse.outputs.should-run }}
+    steps:
+      - name: Parse comment for trigger phrases
+        id: parse
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          if echo "$COMMENT_BODY" | grep -q "/style-check\|@quantecon-style-guide"; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+          fi
+
+  style-check:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/pull/{0}/head', github.event.issue.number) }}
+          
+      - name: Run style guide checker
+        uses: QuantEcon/meta/.github/actions/style-guide-checker@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          docs: 'lectures'
+          mode: 'pr'
+```
+
+**Trigger phrases:**
+- `/style-check` - Simple command-style trigger
+- `@quantecon-style-guide` - Mention-style trigger
+
+Users can comment either phrase on any PR to trigger a style guide review.
+
+### Automatic PR Review
+
+```yaml
+name: Style Guide Review (Automatic)
 on:
   pull_request:
     paths:

@@ -275,3 +275,97 @@ jobs:
           done
           
           echo "✅ README documentation is complete"
+
+  test-comment-trigger-workflow:
+    runs-on: ubuntu-latest
+    name: Test comment trigger workflow structure
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+          
+      - name: Install PyYAML
+        run: pip install pyyaml
+      
+      - name: Validate comment trigger workflow
+        run: |
+          python3 -c "
+          import yaml
+          import sys
+          
+          workflow_file = '.github/actions/style-guide-checker/comment-trigger-workflow.yml'
+          
+          try:
+              with open(workflow_file) as f:
+                  workflow = yaml.safe_load(f)
+                  print('✅ comment-trigger-workflow.yml is valid YAML')
+          except FileNotFoundError:
+              print(f'❌ Missing comment trigger workflow: {workflow_file}')
+              sys.exit(1)
+          except yaml.YAMLError as e:
+              print(f'❌ comment-trigger-workflow.yml has YAML syntax error: {e}')
+              sys.exit(1)
+          
+          # Check required workflow structure
+          if 'on' not in workflow:
+              print('❌ Missing \"on\" trigger configuration')
+              sys.exit(1)
+              
+          if 'issue_comment' not in workflow['on']:
+              print('❌ Missing issue_comment trigger')
+              sys.exit(1)
+              
+          if 'jobs' not in workflow:
+              print('❌ Missing jobs configuration')
+              sys.exit(1)
+              
+          # Check for required jobs
+          required_jobs = ['check-trigger', 'style-check']
+          for job in required_jobs:
+              if job not in workflow['jobs']:
+                  print(f'❌ Missing required job: {job}')
+                  sys.exit(1)
+          
+          # Check comment parsing logic
+          check_trigger_job = workflow['jobs']['check-trigger']
+          if 'if' not in check_trigger_job:
+              print('❌ Missing conditional check for PR comments')
+              sys.exit(1)
+              
+          condition = check_trigger_job['if']
+          if 'github.event.issue.pull_request' not in condition:
+              print('❌ Missing PR validation in trigger condition')
+              sys.exit(1)
+              
+          if '/style-check' not in condition:
+              print('❌ Missing /style-check trigger phrase')
+              sys.exit(1)
+              
+          if '@quantecon-style-guide' not in condition:
+              print('❌ Missing @quantecon-style-guide trigger phrase')
+              sys.exit(1)
+              
+          print('✅ Comment trigger workflow structure is valid')
+          print('✅ Found required trigger phrases: /style-check and @quantecon-style-guide')
+          "
+      
+      - name: Test workflow files exist
+        run: |
+          required_files=(
+            ".github/actions/style-guide-checker/comment-trigger-workflow.yml"
+            ".github/actions/style-guide-checker/example-pr-workflow.yml"
+          )
+          
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ Missing workflow example: $file"
+              exit 1
+            fi
+            echo "✅ Found: $file"
+          done
+          
+          echo "✅ All workflow files present"
