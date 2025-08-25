@@ -132,9 +132,19 @@ if [ "$PR_MODE" = "true" ]; then
     PR_MODE="false"
   fi
   
-  if [ ${#CHANGED_MD_FILES[@]} -eq 0 ]; then
-    echo "No .md files changed in this PR - falling back to normal mode"
-    PR_MODE="false"
+  # Only exit early if git is available but no .md files changed
+  # If git is not available, we already fell back to normal mode above
+  if [ "$PR_MODE" = "true" ] && [ ${#CHANGED_MD_FILES[@]} -eq 0 ]; then
+    echo "📝 No .md files changed in this PR - no HTML files need to be checked"
+    echo "✅ Exiting successfully as no documentation files were modified"
+    
+    # Set outputs for no warnings found
+    echo "warnings-found=false" >> $GITHUB_OUTPUT
+    echo "warning-count=0" >> $GITHUB_OUTPUT
+    echo "warning-details=" >> $GITHUB_OUTPUT
+    echo "detailed-report=" >> $GITHUB_OUTPUT
+    
+    exit 0
   fi
 fi
 

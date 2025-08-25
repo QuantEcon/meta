@@ -40,7 +40,7 @@ inputs:
     required: false
     default: ''
   pr-mode:
-    description: 'When enabled, only check HTML files corresponding to changed .md files in the PR (requires git repository context)'
+    description: 'When enabled, only check HTML files corresponding to changed .md files in the PR. If no .md files changed, exits early with no warnings found (requires git repository context)'
     required: false
     default: 'false'
 

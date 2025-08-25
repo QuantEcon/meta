@@ -326,12 +326,12 @@ jobs:
 
   test-pr-mode-basic:
     runs-on: ubuntu-latest
-    name: Test PR mode basic functionality
+    name: Test PR mode early exit when no .md files changed
     steps:
       - name: Checkout
         uses: actions/checkout@v4
       
-      - name: Test PR mode with non-git context (should fallback to normal mode)
+      - name: Test PR mode with no changed .md files (should exit early)
         id: pr-mode-fallback-test
         uses: .//.github/actions/check-warnings
         with:
@@ -339,18 +339,23 @@ jobs:
           pr-mode: 'true'
           fail-on-warning: 'false'
       
-      - name: Verify fallback results
+      - name: Verify early exit results
         run: |
           echo "Warnings found: ${{ steps.pr-mode-fallback-test.outputs.warnings-found }}"
           echo "Warning count: ${{ steps.pr-mode-fallback-test.outputs.warning-count }}"
           
-          # Should find warnings since it falls back to normal mode
-          if [ "${{ steps.pr-mode-fallback-test.outputs.warnings-found }}" != "true" ]; then
-            echo "❌ Expected warnings in fallback mode but found none"
+          # Should find no warnings since no .md files changed and it exits early
+          if [ "${{ steps.pr-mode-fallback-test.outputs.warnings-found }}" != "false" ]; then
+            echo "❌ Expected no warnings when no .md files changed but found some"
             exit 1
           fi
           
-          echo "✅ PR mode fallback test passed"
+          if [ "${{ steps.pr-mode-fallback-test.outputs.warning-count }}" != "0" ]; then
+            echo "❌ Expected 0 warnings when no .md files changed but found ${{ steps.pr-mode-fallback-test.outputs.warning-count }}"
+            exit 1
+          fi
+          
+          echo "✅ PR mode early exit test passed"
 
   test-pr-mode-simulation:
     runs-on: ubuntu-latest
