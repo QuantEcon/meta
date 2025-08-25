@@ -9,7 +9,10 @@ A GitHub Action that uses AI to review QuantEcon lectures for compliance with th
   - **PR Mode**: Reviews only changed files in pull requests
   - **Full Mode**: Reviews all files in the repository (for scheduled runs)
 - 🎯 **Confidence-Based Actions**:
-  - **PR Mode**: All suggestions provided as GitHub review comments with high-confidence suggestions using GitHub's suggestion feature (click to apply)
+  - **PR Mode**: 
+    - High-confidence suggestions on changed lines use GitHub's suggestion feature (click to apply)
+    - Suggestions on unchanged lines are provided as regular comments
+    - All suggestions are transparent and require reviewer approval
   - **Full Mode**: High-confidence changes are auto-committed; others become review suggestions
 - 🚫 **File Exclusion**: Supports regex patterns to exclude files from review
 - 📊 **Detailed Reporting**: Provides comprehensive summaries and metrics
@@ -190,11 +193,19 @@ jobs:
 
 ### 3. Confidence-Based Actions
 - **PR Mode**: All suggestions are provided as GitHub review comments for transparency and reviewer control
-  - **High Confidence**: Uses GitHub's suggestion feature for one-click application
+  - **High Confidence on Changed Lines**: Uses GitHub's suggestion feature for one-click application (requires line to be part of the PR diff)
+  - **High Confidence on Unchanged Lines**: Regular comments with suggested changes
   - **Medium/Low Confidence**: Regular review comments with suggested changes
 - **Full Mode**: 
   - **High Confidence**: Changes are auto-committed to maintain consistency
   - **Medium/Low Confidence**: Suggested as review comments if in PR context
+
+### 4. GitHub Suggestions Integration
+The action intelligently determines which suggestions can use GitHub's native suggestion feature:
+
+- **Diff-Based Suggestions**: For lines that are part of the PR diff, high-confidence suggestions use the `````suggestion` format that can be applied with one click
+- **Non-Diff Suggestions**: For lines not changed in the PR, suggestions are provided as regular comments with the recommended changes
+- **Transparent Process**: All suggestions require explicit reviewer approval - no automatic commits in PR mode
 
 ### 4. Reporting
 - Creates detailed PR comments with summaries and metrics
