@@ -91,10 +91,25 @@ if [ "$PR_MODE" = "true" ]; then
         # Try different comparison strategies in order of preference
         if git rev-parse --verify "origin/$BASE_REF" >/dev/null 2>&1; then
           echo "Using origin/$BASE_REF for comparison"
-          mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "origin/$BASE_REF"...HEAD | grep '\.md$' || true)
+          # Try three-dot syntax first, fallback to two-dot if no merge base
+          if ! mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "origin/$BASE_REF"...HEAD 2>/dev/null | grep '\.md$' || true); then
+            echo "Three-dot syntax failed, trying two-dot syntax"
+            mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "origin/$BASE_REF"..HEAD | grep '\.md$' || true)
+          fi
+        elif git rev-parse --verify "FETCH_HEAD" >/dev/null 2>&1; then
+          echo "Using FETCH_HEAD for comparison (after fetch)"
+          # Try three-dot syntax first, fallback to two-dot if no merge base
+          if ! mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "FETCH_HEAD"...HEAD 2>/dev/null | grep '\.md$' || true); then
+            echo "Three-dot syntax failed, trying two-dot syntax"
+            mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "FETCH_HEAD"..HEAD | grep '\.md$' || true)
+          fi
         elif git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
           echo "Using $BASE_REF for comparison"
-          mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "$BASE_REF"...HEAD | grep '\.md$' || true)
+          # Try three-dot syntax first, fallback to two-dot if no merge base
+          if ! mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "$BASE_REF"...HEAD 2>/dev/null | grep '\.md$' || true); then
+            echo "Three-dot syntax failed, trying two-dot syntax"
+            mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "$BASE_REF"..HEAD | grep '\.md$' || true)
+          fi
         else
           echo "Warning: Could not find base reference, using merge-base with origin/HEAD"
           # Try to find merge base with origin/HEAD
