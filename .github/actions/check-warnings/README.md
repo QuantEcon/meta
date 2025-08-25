@@ -45,6 +45,37 @@ When `pr-mode` is enabled, the action will:
 
 This significantly reduces noise from warnings in unrelated lectures and helps focus on the changes being made.
 
+**Benefits of PR Mode:**
+- **Faster CI runs**: Only scans relevant files instead of entire documentation
+- **Focused feedback**: Only reports warnings related to your changes
+- **Reduced noise**: Avoids confusion from pre-existing warnings in other files
+- **Better developer experience**: Clearer feedback on what needs to be fixed
+
+### Example: Normal Mode vs PR Mode
+
+**Normal Mode (scans all files):**
+```
+Scanning HTML files in: ./_build/html
+Found 50 HTML files
+❌ Found 15 warnings across all files
+```
+
+**PR Mode (scans only changed files):**
+```
+Running in PR mode - detecting changed .md files...
+Found 2 changed .md file(s):
+  lectures/optimization.md
+  exercises/exercise1.md
+Mapped lectures/optimization.md -> _build/html/lectures/optimization.html
+Mapped exercises/exercise1.md -> _build/html/exercises/exercise1.html
+Will check 2 HTML file(s) in PR mode
+❌ Found 1 warning in changed files
+```
+
+In this example, PR mode helps you focus on the 1 warning in your changes rather than being overwhelmed by 15 warnings across the entire codebase.
+
+In this example, PR mode helps you focus on the 1 warning in your changes rather than being overwhelmed by 15 warnings across the entire codebase.
+
 ### Advanced Usage with PR Comments
 
 ```yaml
@@ -315,7 +346,7 @@ If you're only using the basic warning check functionality, only `contents: read
 
 ## Example Workflow
 
-Here's a complete example of how to use this action in a workflow:
+Here's a complete example of how to use this action in a workflow with PR mode:
 
 ```yaml
 name: Build and Check Documentation
@@ -338,6 +369,9 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        # Fetch full history for proper PR mode operation
+        fetch-depth: 0
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -352,17 +386,31 @@ jobs:
       run: |
         jupyter-book build .
     
-    - name: Check for Python warnings
+    # For PRs: only check changed files to reduce noise
+    - name: Check for Python warnings (PR mode)
+      if: github.event_name == 'pull_request'
       uses: QuantEcon/meta/.github/actions/check-warnings@main
       with:
         html-path: './_build/html'
-        # Uses comprehensive default warnings (all Python warning types)
-        fail-on-warning: ${{ github.event_name == 'push' }}  # Fail on push, warn on PR
-        create-issue: ${{ github.event_name == 'push' }}     # Create issues for main branch
-        notify: 'maintainer1,reviewer2'                      # Assign issues to team members
-        create-artifact: 'true'                              # Always create artifacts
-        artifact-name: 'warning-report'
+        pr-mode: 'true'
+        fail-on-warning: 'true'
+        
+    # For pushes to main: check all files  
+    - name: Check for Python warnings (full check)
+      if: github.event_name == 'push'
+      uses: QuantEcon/meta/.github/actions/check-warnings@main
+      with:
+        html-path: './_build/html'
+        pr-mode: 'false'
+        fail-on-warning: 'false'
+        create-issue: 'true'
+        notify: 'maintainer1,reviewer2'
 ```
+
+This workflow demonstrates:
+- **PR mode for pull requests**: Only checks files related to changes, provides quick feedback
+- **Full mode for main branch**: Comprehensive checking with issue creation for tracking
+- **Different failure behavior**: Strict for PRs, informational for main branch
 
 ## Use Case
 

@@ -226,7 +226,7 @@ runs:
                     FILES+=("$found_file")
                     echo "Mapped $md_file -> $found_file (found recursively)"
                   else
-                    echo "Warning: No corresponding HTML file found for $md_file"
+                    echo "Warning: No corresponding HTML file found for $md_file (searched for $base_name.html)"
                   fi
                 fi
               fi
