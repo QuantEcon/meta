@@ -1,0 +1,28 @@
+# Example workflow for scheduled full repository review
+name: Weekly Style Review
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9 AM UTC
+  workflow_dispatch:     # Allow manual triggering
+
+jobs:
+  full-style-review:
+    runs-on: ubuntu-latest
+    name: Full Repository Style Review
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Run full style guide review
+        uses: QuantEcon/meta/.github/actions/style-guide-checker@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          docs: 'lectures'
+          mode: 'full'
+          create-pr: 'true'
+          confidence-threshold: 'high'
+          max-suggestions: 15

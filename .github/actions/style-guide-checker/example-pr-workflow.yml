@@ -1,0 +1,27 @@
+# Example workflow for automatic PR style review
+# This runs automatically when lecture files are changed
+name: Style Guide Review (Automatic)
+
+on:
+  pull_request:
+    paths:
+      - 'lectures/**/*.md'
+
+jobs:
+  style-check:
+    runs-on: ubuntu-latest
+    name: Style Guide Review
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Run style guide checker
+        uses: QuantEcon/meta/.github/actions/style-guide-checker@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          docs: 'lectures'
+          mode: 'pr'
+          confidence-threshold: 'high'

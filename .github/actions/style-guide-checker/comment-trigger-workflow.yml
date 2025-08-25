@@ -1,0 +1,105 @@
+# Example workflow for comment-based style guide review
+# This workflow triggers when someone comments with "/style-check" on a PR
+name: "Style Guide Review (Comment Triggered)"
+
+"on":
+  issue_comment:
+    types: [created]
+
+jobs:
+  check-trigger:
+    # Only run on pull request comments (not issue comments)
+    if: github.event.issue.pull_request && (contains(github.event.comment.body, '/style-check') || contains(github.event.comment.body, '@quantecon-style-guide'))
+    runs-on: ubuntu-latest
+    name: Parse Comment Trigger
+    outputs:
+      should-run: ${{ steps.parse.outputs.should-run }}
+      trigger-phrase: ${{ steps.parse.outputs.trigger-phrase }}
+    steps:
+      - name: Parse comment for trigger phrases
+        id: parse
+        run: |
+          COMMENT_BODY="${{ github.event.comment.body }}"
+          echo "Comment body: $COMMENT_BODY"
+          
+          # Check for trigger phrases
+          if echo "$COMMENT_BODY" | grep -q "/style-check"; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            echo "trigger-phrase=/style-check" >> $GITHUB_OUTPUT
+            echo "✅ Found /style-check trigger"
+          elif echo "$COMMENT_BODY" | grep -q "@quantecon-style-guide"; then
+            echo "should-run=true" >> $GITHUB_OUTPUT  
+            echo "trigger-phrase=@quantecon-style-guide" >> $GITHUB_OUTPUT
+            echo "✅ Found @quantecon-style-guide trigger"
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "❌ No style check trigger found"
+          fi
+
+  style-check:
+    needs: check-trigger
+    if: needs.check-trigger.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    name: Style Guide Review
+    steps:
+      - name: Add reaction to comment
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          comment-id: ${{ github.event.comment.id }}
+          reactions: eyes
+
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          # Checkout the PR head, not the comment commit
+          ref: ${{ github.event.pull_request.head.sha || format('refs/pull/{0}/head', github.event.issue.number) }}
+          
+      - name: Run style guide checker
+        id: style-check
+        uses: QuantEcon/meta/.github/actions/style-guide-checker@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          docs: 'lectures'
+          mode: 'pr'
+          confidence-threshold: 'high'
+        continue-on-error: true
+
+      - name: Comment with results
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ github.event.issue.number }}
+          body: |
+            ## 🔍 Style Guide Review Results
+            
+            **Triggered by:** ${{ needs.check-trigger.outputs.trigger-phrase }}
+            **Author:** @${{ github.event.comment.user.login }}
+            
+            **📊 Summary:**
+            - **Files reviewed:** ${{ steps.style-check.outputs.files-reviewed }}
+            - **Suggestions made:** ${{ steps.style-check.outputs.suggestions-made }}  
+            - **Auto-applied changes:** ${{ steps.style-check.outputs.high-confidence-changes }}
+            
+            ${{ steps.style-check.outputs.review-summary }}
+            
+            ---
+            💡 **Tip:** You can trigger this check anytime by commenting `/style-check` or `@quantecon-style-guide`
+
+      - name: Add success reaction
+        if: success()
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          comment-id: ${{ github.event.comment.id }}
+          reactions: '+1'
+
+      - name: Add failure reaction  
+        if: failure()
+        uses: peter-evans/create-or-update-comment@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          comment-id: ${{ github.event.comment.id }}
+          reactions: '-1'
