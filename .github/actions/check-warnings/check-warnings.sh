@@ -133,61 +133,64 @@ if [ "$PR_MODE" = "true" ]; then
   fi
   
   if [ ${#CHANGED_MD_FILES[@]} -eq 0 ]; then
-    echo "No .md files changed in this PR - no HTML files to check"
-    FILES=()
-  else
-    echo "Found ${#CHANGED_MD_FILES[@]} changed .md file(s):"
-    printf '%s\n' "${CHANGED_MD_FILES[@]}"
+    echo "No .md files changed in this PR - falling back to normal mode"
+    PR_MODE="false"
+  fi
+fi
+
+# Handle file discovery (both for normal mode and PR mode fallback)
+if [ "$PR_MODE" = "true" ]; then
+  echo "Found ${#CHANGED_MD_FILES[@]} changed .md file(s):"
+  printf '%s\n' "${CHANGED_MD_FILES[@]}"
+  
+  # Map changed .md files to corresponding .html files
+  FILES=()
+  for md_file in "${CHANGED_MD_FILES[@]}"; do
+    # Convert .md file path to corresponding .html file in the build directory
+    # Remove .md extension and add .html
+    base_name=$(basename "$md_file" .md)
     
-    # Map changed .md files to corresponding .html files
-    FILES=()
-    for md_file in "${CHANGED_MD_FILES[@]}"; do
-      # Convert .md file path to corresponding .html file in the build directory
-      # Remove .md extension and add .html
-      base_name=$(basename "$md_file" .md)
+    # Look for the corresponding HTML file in the HTML_PATH
+    if [ -f "$HTML_PATH" ]; then
+      # HTML_PATH is a single file, only check if it matches
+      html_file_name=$(basename "$HTML_PATH" .html)
+      if [ "$base_name" = "$html_file_name" ]; then
+        FILES+=("$HTML_PATH")
+        echo "Mapped $md_file -> $HTML_PATH"
+      fi
+    else
+      # HTML_PATH is a directory, search for corresponding HTML file
+      # Try different possible mappings
+      possible_paths=(
+        "$HTML_PATH/$base_name.html"
+        "$HTML_PATH/$(dirname "$md_file")/$base_name.html"
+      )
       
-      # Look for the corresponding HTML file in the HTML_PATH
-      if [ -f "$HTML_PATH" ]; then
-        # HTML_PATH is a single file, only check if it matches
-        html_file_name=$(basename "$HTML_PATH" .html)
-        if [ "$base_name" = "$html_file_name" ]; then
-          FILES+=("$HTML_PATH")
-          echo "Mapped $md_file -> $HTML_PATH"
+      for html_path in "${possible_paths[@]}"; do
+        if [ -f "$html_path" ]; then
+          FILES+=("$html_path")
+          echo "Mapped $md_file -> $html_path"
+          break
         fi
-      else
-        # HTML_PATH is a directory, search for corresponding HTML file
-        # Try different possible mappings
-        possible_paths=(
-          "$HTML_PATH/$base_name.html"
-          "$HTML_PATH/$(dirname "$md_file")/$base_name.html"
-        )
-        
-        for html_path in "${possible_paths[@]}"; do
-          if [ -f "$html_path" ]; then
-            FILES+=("$html_path")
-            echo "Mapped $md_file -> $html_path"
-            break
-          fi
-        done
-        
-        # If no exact match found, search recursively
-        if ! printf '%s\n' "${FILES[@]}" | grep -q "/$base_name.html"; then
-          found_file=$(find "$HTML_PATH" -name "$base_name.html" -type f | head -1)
-          if [ -n "$found_file" ]; then
-            FILES+=("$found_file")
-            echo "Mapped $md_file -> $found_file (found recursively)"
-          else
-            echo "Warning: No corresponding HTML file found for $md_file (searched for $base_name.html)"
-          fi
+      done
+      
+      # If no exact match found, search recursively
+      if ! printf '%s\n' "${FILES[@]}" | grep -q "/$base_name.html"; then
+        found_file=$(find "$HTML_PATH" -name "$base_name.html" -type f | head -1)
+        if [ -n "$found_file" ]; then
+          FILES+=("$found_file")
+          echo "Mapped $md_file -> $found_file (found recursively)"
+        else
+          echo "Warning: No corresponding HTML file found for $md_file (searched for $base_name.html)"
         fi
       fi
-    done
-    
-    if [ ${#FILES[@]} -eq 0 ]; then
-      echo "No HTML files found corresponding to changed .md files"
-    else
-      echo "Will check ${#FILES[@]} HTML file(s) in PR mode"
     fi
+  done
+  
+  if [ ${#FILES[@]} -eq 0 ]; then
+    echo "No HTML files found corresponding to changed .md files"
+  else
+    echo "Will check ${#FILES[@]} HTML file(s) in PR mode"
   fi
 else
   # Normal mode - find all HTML files or use specified file
