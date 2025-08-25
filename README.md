@@ -25,6 +25,42 @@ A GitHub Action that scans HTML files for Python warnings and optionally fails t
 
 See the [action documentation](./.github/actions/check-warnings/README.md) for detailed usage instructions and examples.
 
+### QuantEcon Style Guide Checker
+
+An AI-enabled GitHub Action that checks lecture compliance with the QuantEcon Style Guide and provides intelligent suggestions for improvements.
+
+**Location**: `.github/actions/qe-style-check`
+
+**Usage**:
+```yaml
+# PR Mode (triggered by @qe-style-check mention)
+- name: Style Guide Check
+  uses: QuantEcon/meta/.github/actions/qe-style-check@main
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    lectures: 'lectures'
+    mode: 'pr'
+
+# Scheduled Mode (complete review)
+- name: Weekly Style Review
+  uses: QuantEcon/meta/.github/actions/qe-style-check@main
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    mode: 'scheduled'
+    create-individual-prs: 'true'
+```
+
+**Features**:
+- **Dual Operation Modes**: PR-triggered checks and scheduled complete reviews
+- **Intelligent Analysis**: Rule-based checking with confidence levels (high/medium/low)
+- **Automated Fixes**: High confidence suggestions can be auto-committed
+- **Comprehensive Reporting**: Detailed tables with suggestions organized by confidence
+- **Flexible Configuration**: Customizable paths, exclusions, and thresholds
+
+**Use case**: Automated style guide compliance checking for QuantEcon lectures, ensuring consistent formatting, proper mathematical notation, code style, and figure presentation across all content.
+
+See the [action documentation](./.github/actions/qe-style-check/README.md) for detailed usage instructions and examples.
+
 ### Weekly Report Action
 
 A GitHub Action that generates a weekly report summarizing issues and PR activity across all QuantEcon repositories.
