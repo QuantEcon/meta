@@ -39,6 +39,10 @@ inputs:
     description: 'GitHub username(s) to assign to the created issue (comma-separated for multiple users)'
     required: false
     default: ''
+  pr-mode:
+    description: 'When enabled, only check HTML files corresponding to changed .md files in the PR. If no .md files changed, exits early with no warnings found (requires git repository context)'
+    required: false
+    default: 'false'
 
 outputs:
   warnings-found:
@@ -50,6 +54,9 @@ outputs:
   warning-details:
     description: 'Details of warnings found'
     value: ${{ steps.check.outputs.warning-details }}
+  detailed-report:
+    description: 'Detailed markdown report of warnings found'
+    value: ${{ steps.check.outputs.detailed-report }}
   issue-url:
     description: 'URL of the created GitHub issue (if create-issue is enabled)'
     value: ${{ steps.create-issue.outputs.issue-url }}
@@ -63,192 +70,15 @@ runs:
     - name: Check for warnings
       id: check
       shell: bash
+      env:
+        INPUT_HTML_PATH: ${{ inputs.html-path }}
+        INPUT_WARNINGS: ${{ inputs.warnings }}
+        INPUT_EXCLUDE_WARNING: ${{ inputs.exclude-warning }}
+        INPUT_FAIL_ON_WARNING: ${{ inputs.fail-on-warning }}
+        INPUT_PR_MODE: ${{ inputs.pr-mode }}
       run: |
-        # Parse inputs
-        HTML_PATH="${{ inputs.html-path }}"
-        WARNINGS="${{ inputs.warnings }}"
-        EXCLUDE_WARNINGS="${{ inputs.exclude-warning }}"
-        FAIL_ON_WARNING="${{ inputs.fail-on-warning }}"
-        
-        echo "Scanning HTML files in: $HTML_PATH"
-        echo "Looking for warnings: $WARNINGS"
-        
-        # Convert comma-separated warnings to array
-        IFS=',' read -ra WARNING_ARRAY <<< "$WARNINGS"
-        
-        # Handle exclude-warning parameter
-        if [ -n "$EXCLUDE_WARNINGS" ]; then
-          echo "Excluding warnings: $EXCLUDE_WARNINGS"
-          # Convert comma-separated exclude warnings to array
-          IFS=',' read -ra EXCLUDE_ARRAY <<< "$EXCLUDE_WARNINGS"
-          
-          # Create a new array with warnings not in exclude list
-          FILTERED_WARNING_ARRAY=()
-          for warning in "${WARNING_ARRAY[@]}"; do
-            # Remove leading/trailing whitespace from warning
-            warning=$(echo "$warning" | xargs)
-            exclude_warning=false
-            
-            # Check if this warning should be excluded
-            for exclude in "${EXCLUDE_ARRAY[@]}"; do
-              # Remove leading/trailing whitespace from exclude warning
-              exclude=$(echo "$exclude" | xargs)
-              if [ "$warning" = "$exclude" ]; then
-                exclude_warning=true
-                break
-              fi
-            done
-            
-            # Add to filtered array if not excluded
-            if [ "$exclude_warning" = false ]; then
-              FILTERED_WARNING_ARRAY+=("$warning")
-            fi
-          done
-          
-          # Replace WARNING_ARRAY with filtered array
-          WARNING_ARRAY=("${FILTERED_WARNING_ARRAY[@]}")
-          
-          # Show final warning list
-          if [ ${#WARNING_ARRAY[@]} -eq 0 ]; then
-            echo "⚠️  All warnings have been excluded. No warnings will be checked."
-          else
-            echo "Final warning list after exclusions: ${WARNING_ARRAY[*]}"
-          fi
-        fi
-        
-        # Initialize counters
-        TOTAL_WARNINGS=0
-        WARNING_DETAILS=""
-        WARNINGS_FOUND="false"
-        DETAILED_REPORT=""
-        
-        # Find all HTML files
-        if [ ! -e "$HTML_PATH" ]; then
-          echo "Error: HTML path '$HTML_PATH' does not exist"
-          exit 1
-        fi
-        
-        # Determine if we're dealing with a file or directory
-        if [ -f "$HTML_PATH" ]; then
-          # Single file
-          if [[ "$HTML_PATH" == *.html ]]; then
-            echo "Checking single HTML file: $HTML_PATH"
-            FILES=("$HTML_PATH")
-          else
-            echo "Error: '$HTML_PATH' is not an HTML file"
-            exit 1
-          fi
-        else
-          # Directory - find all HTML files
-          mapfile -d '' FILES < <(find "$HTML_PATH" -name "*.html" -type f -print0)
-        fi
-        
-        # Create temporary Python script for parsing HTML
-        echo 'import re' > /tmp/check_warnings.py
-        echo 'import sys' >> /tmp/check_warnings.py
-        echo 'import os' >> /tmp/check_warnings.py
-        echo '' >> /tmp/check_warnings.py
-        echo 'def find_warnings_in_cell_outputs(file_path, warning_text):' >> /tmp/check_warnings.py
-        echo '    try:' >> /tmp/check_warnings.py
-        echo '        with open(file_path, "r", encoding="utf-8") as f:' >> /tmp/check_warnings.py
-        echo '            content = f.read()' >> /tmp/check_warnings.py
-        echo '        ' >> /tmp/check_warnings.py
-        echo '        # Find all HTML elements with cell_output in the class attribute' >> /tmp/check_warnings.py
-        echo '        pattern = r"<([^>]+)\s+class=\"[^\"]*cell_output[^\"]*\"[^>]*>(.*?)</\1>"' >> /tmp/check_warnings.py
-        echo '        ' >> /tmp/check_warnings.py
-        echo '        matches = []' >> /tmp/check_warnings.py
-        echo '        ' >> /tmp/check_warnings.py
-        echo '        # Search for cell_output blocks' >> /tmp/check_warnings.py
-        echo '        for match in re.finditer(pattern, content, re.DOTALL | re.IGNORECASE):' >> /tmp/check_warnings.py
-        echo '            block_content = match.group(2)' >> /tmp/check_warnings.py
-        echo '            block_start = match.start()' >> /tmp/check_warnings.py
-        echo '            ' >> /tmp/check_warnings.py
-        echo '            # Count line number where this block starts' >> /tmp/check_warnings.py
-        echo '            block_line = content[:block_start].count("\\n") + 1' >> /tmp/check_warnings.py
-        echo '            ' >> /tmp/check_warnings.py
-        echo '            # Search for warning within this block' >> /tmp/check_warnings.py
-        echo '            if warning_text in block_content:' >> /tmp/check_warnings.py
-        echo '                # Find specific lines within the block that contain the warning' >> /tmp/check_warnings.py
-        echo '                block_lines = block_content.split("\\n")' >> /tmp/check_warnings.py
-        echo '                for i, line in enumerate(block_lines):' >> /tmp/check_warnings.py
-        echo '                    if warning_text in line:' >> /tmp/check_warnings.py
-        echo '                        actual_line_num = block_line + i' >> /tmp/check_warnings.py
-        echo '                        # Clean up the line for display (remove extra whitespace, HTML tags)' >> /tmp/check_warnings.py
-        echo '                        clean_line = re.sub(r"<[^>]+>", "", line).strip()' >> /tmp/check_warnings.py
-        echo '                        if clean_line:  # Only add non-empty lines' >> /tmp/check_warnings.py
-        echo '                            matches.append(f"{actual_line_num}:{clean_line}")' >> /tmp/check_warnings.py
-        echo '        ' >> /tmp/check_warnings.py
-        echo '        # Output results' >> /tmp/check_warnings.py
-        echo '        for match in matches:' >> /tmp/check_warnings.py
-        echo '            print(match)' >> /tmp/check_warnings.py
-        echo '            ' >> /tmp/check_warnings.py
-        echo '    except Exception as e:' >> /tmp/check_warnings.py
-        echo '        print(f"Error processing file: {e}", file=sys.stderr)' >> /tmp/check_warnings.py
-        echo '        sys.exit(1)' >> /tmp/check_warnings.py
-        echo '' >> /tmp/check_warnings.py
-        echo 'if __name__ == "__main__":' >> /tmp/check_warnings.py
-        echo '    file_path = sys.argv[1]' >> /tmp/check_warnings.py
-        echo '    warning_text = sys.argv[2]' >> /tmp/check_warnings.py
-        echo '    find_warnings_in_cell_outputs(file_path, warning_text)' >> /tmp/check_warnings.py
-        
-        # Search for warnings in HTML files within cell_output elements
-        for file in "${FILES[@]}"; do
-          echo "Checking file: $file"
-          
-          # Skip warning check if no warnings to check for
-          if [ ${#WARNING_ARRAY[@]} -eq 0 ]; then
-            echo "No warnings to check for in $file (all excluded)"
-            continue
-          fi
-          
-          for warning in "${WARNING_ARRAY[@]}"; do
-            # Remove leading/trailing whitespace from warning
-            warning=$(echo "$warning" | xargs)
-            
-            # Run the Python script and capture results
-            matches=$(python3 /tmp/check_warnings.py "$file" "$warning" 2>/dev/null || true)
-            
-            if [ -n "$matches" ]; then
-              WARNINGS_FOUND="true"
-              count=$(echo "$matches" | wc -l)
-              TOTAL_WARNINGS=$((TOTAL_WARNINGS + count))
-              
-              echo "⚠️  Found $count instance(s) of '$warning' in $file:"
-              echo "$matches"
-              
-              # Add to basic details
-              if [ -n "$WARNING_DETAILS" ]; then
-                WARNING_DETAILS="$WARNING_DETAILS\n"
-              fi
-              WARNING_DETAILS="$WARNING_DETAILS$file: $count instance(s) of '$warning'"
-              
-              # Add to detailed report
-              DETAILED_REPORT="$DETAILED_REPORT## $warning in $file\n\n"
-              DETAILED_REPORT="$DETAILED_REPORT**Found $count instance(s):**\n\n"
-              DETAILED_REPORT="$DETAILED_REPORT\`\`\`\n"
-              DETAILED_REPORT="$DETAILED_REPORT$matches\n"
-              DETAILED_REPORT="$DETAILED_REPORT\`\`\`\n\n"
-            fi
-          done
-        done
-        
-        # Set outputs
-        echo "warnings-found=$WARNINGS_FOUND" >> $GITHUB_OUTPUT
-        echo "warning-count=$TOTAL_WARNINGS" >> $GITHUB_OUTPUT
-        echo "warning-details<<EOF" >> $GITHUB_OUTPUT
-        echo -e "$WARNING_DETAILS" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        echo "detailed-report<<EOF" >> $GITHUB_OUTPUT
-        echo -e "$DETAILED_REPORT" >> $GITHUB_OUTPUT
-        echo "EOF" >> $GITHUB_OUTPUT
-        
-        # Summary
-        if [ "$WARNINGS_FOUND" = "true" ]; then
-          echo "❌ Found $TOTAL_WARNINGS warning(s) in HTML files"
-          echo "::error::Found $TOTAL_WARNINGS Python warning(s) in HTML output"
-        else
-          echo "✅ No warnings found in HTML files"
-        fi
+        # Run the check-warnings script
+        ${{ github.action_path }}/check-warnings.sh
 
     - name: Post PR comment with warning report
       if: inputs.fail-on-warning == 'true' && steps.check.outputs.warnings-found == 'true' && github.event_name == 'pull_request'
