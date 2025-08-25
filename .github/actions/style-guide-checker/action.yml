@@ -20,7 +20,7 @@ inputs:
     required: false
     default: 'pr'
   confidence-threshold:
-    description: 'Minimum confidence level for auto-commits (high, medium, low)'
+    description: 'Minimum confidence level for auto-commits in full mode (high, medium, low). In PR mode, all suggestions use GitHub review comments.'
     required: false
     default: 'high'
   github-token:
@@ -47,7 +47,7 @@ outputs:
     description: 'Total number of suggestions made'
     value: ${{ steps.check.outputs.suggestions-made }}
   high-confidence-changes:
-    description: 'Number of high confidence changes auto-committed'
+    description: 'Number of high confidence changes auto-committed (only in full mode)'
     value: ${{ steps.check.outputs.high-confidence-changes }}
   pr-url:
     description: 'URL of created PR (in scheduled mode)'

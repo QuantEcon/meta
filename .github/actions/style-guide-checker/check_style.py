@@ -7,13 +7,14 @@ AI-powered style guide compliance checker that reviews MyST Markdown files
 for adherence to QuantEcon style guidelines.
 
 Supports two modes:
-1. PR mode: Reviews only changed files in a pull request
-2. Full mode: Reviews all files in the specified directory
+1. PR mode: Reviews only changed files in a pull request, provides all suggestions as GitHub review comments
+2. Full mode: Reviews all files in the specified directory, auto-commits high-confidence changes
 
 Features:
 - AI-powered style analysis using OpenAI API
 - Confidence-based categorization of suggestions
-- Automatic commits for high-confidence changes
+- In PR mode: GitHub suggestions for high-confidence changes, review comments for others
+- In Full mode: Automatic commits for high-confidence changes
 - PR review suggestions for medium/low confidence changes
 - Regex-based file exclusion
 """
@@ -459,7 +460,7 @@ Limit to {self.max_suggestions} suggestions maximum.
         return changes_made
         
     def create_pr_review_suggestions(self, suggestions: List[StyleSuggestion]):
-        """Create PR review suggestions for medium/low confidence changes"""
+        """Create PR review suggestions for all confidence levels using GitHub suggestions"""
         if self.github_event_name != 'pull_request' or not self.repo:
             self.logger.info("Not in PR context or GitHub not available, skipping review suggestions")
             return
@@ -474,16 +475,30 @@ Limit to {self.max_suggestions} suggestions maximum.
             # Group suggestions by file
             file_suggestions = {}
             for suggestion in suggestions:
-                if suggestion.confidence in [ConfidenceLevel.MEDIUM, ConfidenceLevel.LOW]:
-                    if suggestion.file_path not in file_suggestions:
-                        file_suggestions[suggestion.file_path] = []
-                    file_suggestions[suggestion.file_path].append(suggestion)
+                if suggestion.file_path not in file_suggestions:
+                    file_suggestions[suggestion.file_path] = []
+                file_suggestions[suggestion.file_path].append(suggestion)
                     
             # Create review comments
             review_comments = []
             for file_path, suggestions_list in file_suggestions.items():
                 for suggestion in suggestions_list:
-                    comment_body = f"""
+                    if suggestion.confidence == ConfidenceLevel.HIGH:
+                        # Use GitHub suggestion format for high-confidence changes
+                        comment_body = f"""
+**Style Guide Suggestion ({suggestion.confidence.value} confidence)**
+
+{suggestion.explanation}
+
+**Rule category:** {suggestion.rule_category}
+
+```suggestion
+{suggestion.suggested_text}
+```
+"""
+                    else:
+                        # Use regular comment format for medium/low confidence
+                        comment_body = f"""
 **Style Guide Suggestion ({suggestion.confidence.value} confidence)**
 
 {suggestion.explanation}
@@ -503,7 +518,7 @@ Limit to {self.max_suggestions} suggestions maximum.
                     
             if review_comments:
                 pr.create_review(
-                    body="Style guide review completed. Please review the suggestions below.",
+                    body="Style guide review completed. High-confidence suggestions are provided as GitHub suggestions that you can apply with one click. Please review all suggestions below.",
                     event="COMMENT",
                     comments=review_comments
                 )
@@ -512,7 +527,7 @@ Limit to {self.max_suggestions} suggestions maximum.
         except Exception as e:
             self.logger.error(f"Failed to create PR review suggestions: {e}")
             
-    def create_pr_comment_summary(self, suggestions: List[StyleSuggestion], files_reviewed: int, changes_made: int):
+    def create_pr_comment_summary(self, suggestions: List[StyleSuggestion], files_reviewed: int, changes_made: int = 0):
         """Create a summary comment on the PR"""
         if self.github_event_name != 'pull_request' or not self.repo:
             self.logger.info("Not in PR context or GitHub not available, skipping PR comment")
@@ -535,16 +550,17 @@ Limit to {self.max_suggestions} suggestions maximum.
 **Files reviewed:** {files_reviewed}
 **Total suggestions:** {len(suggestions)}
 
-**Changes made:**
-- ✅ **{changes_made}** high-confidence changes auto-committed
-- 💭 **{medium_conf + low_conf}** suggestions added as review comments
+**Suggestions provided:**
+- 🔥 **{high_conf}** high-confidence suggestions (GitHub suggestions - click to apply)
+- ⚠️ **{medium_conf}** medium-confidence suggestions  
+- 💡 **{low_conf}** low-confidence suggestions
 
 **Suggestion breakdown:**
-- 🔥 High confidence: {high_conf}
-- ⚠️ Medium confidence: {medium_conf}  
-- 💡 Low confidence: {low_conf}
+- **High confidence**: Ready-to-apply suggestions using GitHub's suggestion feature
+- **Medium confidence**: Recommended changes that may need minor adjustments
+- **Low confidence**: Optional improvements for consideration
 
-The high-confidence changes have been automatically applied to maintain consistency with the [QuantEcon Style Guide]({self.style_guide_path}). Please review the other suggestions in the file comments.
+All suggestions are based on the [QuantEcon Style Guide]({self.style_guide_path}). High-confidence suggestions can be applied with a single click using GitHub's suggestion feature for transparency and reviewer control.
 
 ---
 *Generated by [Style Guide Checker Action](https://github.com/QuantEcon/meta/.github/actions/style-guide-checker)*
@@ -597,19 +613,26 @@ The high-confidence changes have been automatically applied to maintain consiste
                 except Exception as e:
                     self.logger.error(f"Failed to analyze {file_path}: {e}")
                     
-            # Apply high confidence changes
             changes_made = 0
-            if self.confidence_threshold in [ConfidenceLevel.HIGH]:
-                changes_made = self.apply_high_confidence_changes(all_suggestions)
-                
-                # Commit changes if any were made
-                if changes_made > 0:
-                    self.commit_changes(changes_made)
-                    
-            # Create PR review suggestions for medium/low confidence
+            
+            # Handle suggestions based on mode
             if self.mode == 'pr':
+                # In PR mode, create review suggestions for all confidence levels
+                # High-confidence suggestions will use GitHub's suggestion feature
                 self.create_pr_review_suggestions(all_suggestions)
-                self.create_pr_comment_summary(all_suggestions, len(files_to_review), changes_made)
+                self.create_pr_comment_summary(all_suggestions, len(files_to_review))
+                self.logger.info("PR mode: All suggestions provided as review comments with GitHub suggestions for high-confidence changes")
+                
+            else:
+                # In full mode, still apply high confidence changes and commit them
+                if self.confidence_threshold in [ConfidenceLevel.HIGH]:
+                    changes_made = self.apply_high_confidence_changes(all_suggestions)
+                    
+                    # Commit changes if any were made
+                    if changes_made > 0:
+                        self.commit_changes(changes_made)
+                        
+                self.logger.info(f"Full mode: Applied {changes_made} high-confidence changes")
                 
             # Set outputs
             self.set_outputs(len(files_to_review), len(all_suggestions), changes_made)

@@ -9,8 +9,8 @@ A GitHub Action that uses AI to review QuantEcon lectures for compliance with th
   - **PR Mode**: Reviews only changed files in pull requests
   - **Full Mode**: Reviews all files in the repository (for scheduled runs)
 - 🎯 **Confidence-Based Actions**:
-  - **High confidence**: Auto-commits changes directly
-  - **Medium/Low confidence**: Creates PR review suggestions for human review
+  - **PR Mode**: All suggestions provided as GitHub review comments with high-confidence suggestions using GitHub's suggestion feature (click to apply)
+  - **Full Mode**: High-confidence changes are auto-committed; others become review suggestions
 - 🚫 **File Exclusion**: Supports regex patterns to exclude files from review
 - 📊 **Detailed Reporting**: Provides comprehensive summaries and metrics
 
@@ -189,9 +189,12 @@ jobs:
 - **Rule-Based Fallback**: Uses predefined rules for common style issues when OpenAI is not available
 
 ### 3. Confidence-Based Actions
-- **High Confidence**: Changes that clearly violate style rules are auto-committed
-- **Medium Confidence**: Likely style improvements suggested as PR review comments
-- **Low Confidence**: Potential improvements suggested as PR review comments
+- **PR Mode**: All suggestions are provided as GitHub review comments for transparency and reviewer control
+  - **High Confidence**: Uses GitHub's suggestion feature for one-click application
+  - **Medium/Low Confidence**: Regular review comments with suggested changes
+- **Full Mode**: 
+  - **High Confidence**: Changes are auto-committed to maintain consistency
+  - **Medium/Low Confidence**: Suggested as review comments if in PR context
 
 ### 4. Reporting
 - Creates detailed PR comments with summaries and metrics
@@ -240,33 +243,50 @@ When the action runs on a pull request, it creates a summary comment like:
 **Files reviewed:** 3
 **Total suggestions:** 8
 
-**Changes made:**
-- ✅ **2** high-confidence changes auto-committed
-- 💭 **6** suggestions added as review comments
+**Suggestions provided:**
+- 🔥 **2** high-confidence suggestions (GitHub suggestions - click to apply)
+- ⚠️ **4** medium-confidence suggestions  
+- 💡 **2** low-confidence suggestions
 
 **Suggestion breakdown:**
-- 🔥 High confidence: 2
-- ⚠️ Medium confidence: 4
-- 💡 Low confidence: 2
+- **High confidence**: Ready-to-apply suggestions using GitHub's suggestion feature
+- **Medium confidence**: Recommended changes that may need minor adjustments
+- **Low confidence**: Optional improvements for consideration
 
-The high-confidence changes have been automatically applied to maintain consistency with the QuantEcon Style Guide. Please review the other suggestions in the file comments.
+All suggestions are based on the QuantEcon Style Guide. High-confidence suggestions can be applied with a single click using GitHub's suggestion feature for transparency and reviewer control.
 ```
 
-### Example Review Suggestion
+### Example High-Confidence Suggestion
 
-Individual suggestions appear as PR review comments:
+High-confidence suggestions use GitHub's suggestion feature for easy application:
+
+```markdown
+**Style Guide Suggestion (high confidence)**
+
+Use Unicode α instead of 'alpha' for better mathematical notation
+
+**Rule category:** variable_naming
+
+```suggestion
+def utility_function(c, α=0.5, β=0.95):
+```
+```
+
+### Example Medium/Low-Confidence Suggestion
+
+Other suggestions appear as regular review comments:
 
 ```markdown
 **Style Guide Suggestion (medium confidence)**
 
-Use Unicode α instead of 'alpha' for better mathematical notation
+Consider improving paragraph clarity by breaking into shorter sentences
 
 **Suggested change:**
 ```markdown
-def utility_function(c, α=0.5, β=0.95):
+This sentence is too long and contains multiple ideas. It should be split for better readability.
 ```
 
-**Rule category:** variable_naming
+**Rule category:** writing_conventions
 ```
 
 ## Setup Requirements
