@@ -25,6 +25,26 @@ This GitHub Action scans HTML files for Python warnings and optionally fails the
   uses: QuantEcon/meta/.github/actions/check-warnings@main
 ```
 
+### Advanced Usage with PR Mode
+
+The action supports a special "PR mode" that only checks HTML files corresponding to changed `.md` files in a pull request. This is particularly useful for large documentation repositories where you only want to check warnings in lectures that are being modified:
+
+```yaml
+- name: Check for Python warnings in changed lectures only
+  uses: QuantEcon/meta/.github/actions/check-warnings@main
+  with:
+    html-path: './_build/html'
+    pr-mode: 'true'
+    fail-on-warning: 'true'
+```
+
+When `pr-mode` is enabled, the action will:
+1. Detect which `.md` files have changed in the current PR or push
+2. Map each changed `.md` file to its corresponding `.html` file in the build directory
+3. Only scan those specific HTML files for warnings
+
+This significantly reduces noise from warnings in unrelated lectures and helps focus on the changes being made.
+
 ### Advanced Usage with PR Comments
 
 ```yaml
@@ -211,6 +231,28 @@ You can enable both issue creation and artifact generation simultaneously:
 
 This action specifically searches for Python warnings within HTML elements that have `cell_output` in their class attribute. This approach prevents false positives that would occur if warnings like "FutureWarning" or "DeprecationWarning" are mentioned in the text content of documentation pages.
 
+### PR Mode
+
+When `pr-mode` is enabled, the action performs these additional steps:
+
+1. **Detect Changed Files**: Uses git to identify which `.md` files have changed in the current PR or push
+2. **Map to HTML Files**: For each changed `.md` file, finds the corresponding `.html` file in the build directory using these strategies:
+   - Direct mapping: `lecture.md` → `build/html/lecture.html`
+   - Path-preserving mapping: `path/to/lecture.md` → `build/html/path/to/lecture.html`
+   - Recursive search: Finds `lecture.html` anywhere in the build directory
+3. **Focused Scanning**: Only scans the mapped HTML files instead of all HTML files in the directory
+
+This is particularly valuable for large documentation repositories where:
+- You have many lecture files but only modify a few in each PR
+- You want to avoid reporting warnings from unrelated lectures
+- You want faster CI runs by scanning fewer files
+
+### File Mapping Examples
+
+- `introduction.md` → `_build/html/introduction.html`
+- `lectures/chapter1.md` → `_build/html/lectures/chapter1.html`
+- `advanced/optimization.md` → `_build/html/advanced/optimization.html`
+
 ### Example HTML Structure
 
 The action will detect warnings in this structure:
@@ -259,6 +301,7 @@ If you're only using the basic warning check functionality, only `contents: read
 | `create-artifact` | Whether to create a workflow artifact with the warning report | No | `false` |
 | `artifact-name` | Name for the workflow artifact containing the warning report | No | `warning-report` |
 | `notify` | GitHub username(s) to assign to the created issue (comma-separated for multiple users) | No | `` |
+| `pr-mode` | When enabled, only check HTML files corresponding to changed .md files in the PR (requires git repository context) | No | `false` |
 
 ## Outputs
 
