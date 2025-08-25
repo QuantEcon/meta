@@ -92,31 +92,31 @@ if [ "$PR_MODE" = "true" ]; then
         if git rev-parse --verify "origin/$BASE_REF" >/dev/null 2>&1; then
           echo "Using origin/$BASE_REF for comparison"
           # Try three-dot syntax first, fallback to two-dot if no merge base
-          if git diff --name-only --diff-filter=AM "origin/$BASE_REF"...HEAD >/dev/null 2>&1; then
+          if git merge-base "origin/$BASE_REF" HEAD >/dev/null 2>&1; then
             echo "Using three-dot syntax with origin/$BASE_REF"
             mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "origin/$BASE_REF"...HEAD | grep '\.md$' || true)
           else
-            echo "Three-dot syntax failed, trying two-dot syntax with origin/$BASE_REF"
+            echo "No merge base found, trying two-dot syntax with origin/$BASE_REF"
             mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "origin/$BASE_REF"..HEAD | grep '\.md$' || true)
           fi
         elif git rev-parse --verify "FETCH_HEAD" >/dev/null 2>&1; then
           echo "Using FETCH_HEAD for comparison (after fetch)"
           # Try three-dot syntax first, fallback to two-dot if no merge base
-          if git diff --name-only --diff-filter=AM "FETCH_HEAD"...HEAD >/dev/null 2>&1; then
+          if git merge-base "FETCH_HEAD" HEAD >/dev/null 2>&1; then
             echo "Using three-dot syntax with FETCH_HEAD"
             mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "FETCH_HEAD"...HEAD | grep '\.md$' || true)
           else
-            echo "Three-dot syntax failed, trying two-dot syntax with FETCH_HEAD"
+            echo "No merge base found, trying two-dot syntax with FETCH_HEAD"
             mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "FETCH_HEAD"..HEAD | grep '\.md$' || true)
           fi
         elif git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
           echo "Using $BASE_REF for comparison"
           # Try three-dot syntax first, fallback to two-dot if no merge base
-          if git diff --name-only --diff-filter=AM "$BASE_REF"...HEAD >/dev/null 2>&1; then
+          if git merge-base "$BASE_REF" HEAD >/dev/null 2>&1; then
             echo "Using three-dot syntax with $BASE_REF"
             mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "$BASE_REF"...HEAD | grep '\.md$' || true)
           else
-            echo "Three-dot syntax failed, trying two-dot syntax with $BASE_REF"
+            echo "No merge base found, trying two-dot syntax with $BASE_REF"
             mapfile -t CHANGED_MD_FILES < <(git diff --name-only --diff-filter=AM "$BASE_REF"..HEAD | grep '\.md$' || true)
           fi
         else
