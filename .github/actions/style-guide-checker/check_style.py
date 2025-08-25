@@ -459,6 +459,48 @@ Limit to {self.max_suggestions} suggestions maximum.
                 
         return changes_made
         
+    def get_pr_diff_context(self, pr_number: int) -> Dict[str, Dict[int, int]]:
+        """Get mapping of file lines to diff positions for PR review suggestions"""
+        try:
+            pr = self.repo.get_pull(pr_number)
+            file_diff_map = {}
+            
+            for file in pr.get_files():
+                if not file.filename.endswith('.md'):
+                    continue
+                    
+                file_diff_map[file.filename] = {}
+                
+                # Parse the patch to get line number to position mapping
+                if file.patch:
+                    diff_position = 0
+                    for line in file.patch.split('\n'):
+                        if line.startswith('@@'):
+                            # Parse hunk header: @@ -old_start,old_count +new_start,new_count @@
+                            match = re.search(r'@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@', line)
+                            if match:
+                                current_line = int(match.group(1))
+                        elif line.startswith('+') and not line.startswith('+++'):
+                            # Added line
+                            file_diff_map[file.filename][current_line] = diff_position
+                            current_line += 1
+                        elif line.startswith(' '):
+                            # Context line
+                            file_diff_map[file.filename][current_line] = diff_position
+                            current_line += 1
+                        elif not line.startswith('-') and not line.startswith('\\'):
+                            # Only increment for non-deleted lines
+                            pass
+                        
+                        if not line.startswith('\\'):  # Ignore "\ No newline at end of file"
+                            diff_position += 1
+                            
+            return file_diff_map
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get PR diff context: {e}")
+            return {}
+
     def create_pr_review_suggestions(self, suggestions: List[StyleSuggestion]):
         """Create PR review suggestions for all confidence levels using GitHub suggestions"""
         if self.github_event_name != 'pull_request' or not self.repo:
@@ -472,21 +514,30 @@ Limit to {self.max_suggestions} suggestions maximum.
                 
             pr = self.repo.get_pull(pr_number)
             
-            # Group suggestions by file
-            file_suggestions = {}
+            # Get diff context to determine which lines can have review comments
+            diff_context = self.get_pr_diff_context(pr_number)
+            
+            # Separate suggestions that can use review comments vs regular comments
+            review_suggestions = []
+            regular_suggestions = []
+            
             for suggestion in suggestions:
-                if suggestion.file_path not in file_suggestions:
-                    file_suggestions[suggestion.file_path] = []
-                file_suggestions[suggestion.file_path].append(suggestion)
+                # Check if this line is in the diff and can have a review comment
+                if (suggestion.file_path in diff_context and 
+                    suggestion.line_number in diff_context[suggestion.file_path]):
+                    review_suggestions.append(suggestion)
+                else:
+                    regular_suggestions.append(suggestion)
+            
+            # Create review comments for suggestions on changed lines
+            if review_suggestions:
+                review_comments = []
+                for suggestion in review_suggestions:
+                    diff_position = diff_context[suggestion.file_path][suggestion.line_number]
                     
-            # Create review comments
-            review_comments = []
-            for file_path, suggestions_list in file_suggestions.items():
-                for suggestion in suggestions_list:
                     if suggestion.confidence == ConfidenceLevel.HIGH:
                         # Use GitHub suggestion format for high-confidence changes
-                        comment_body = f"""
-**Style Guide Suggestion ({suggestion.confidence.value} confidence)**
+                        comment_body = f"""**Style Guide Suggestion ({suggestion.confidence.value} confidence)**
 
 {suggestion.explanation}
 
@@ -494,35 +545,49 @@ Limit to {self.max_suggestions} suggestions maximum.
 
 ```suggestion
 {suggestion.suggested_text}
-```
-"""
+```"""
                     else:
                         # Use regular comment format for medium/low confidence
-                        comment_body = f"""
-**Style Guide Suggestion ({suggestion.confidence.value} confidence)**
+                        comment_body = f"""**Style Guide Suggestion ({suggestion.confidence.value} confidence)**
 
 {suggestion.explanation}
 
 **Suggested change:**
-```markdown
+```python
 {suggestion.suggested_text}
 ```
 
-**Rule category:** {suggestion.rule_category}
-"""
+**Rule category:** {suggestion.rule_category}"""
+                        
                     review_comments.append({
                         'path': suggestion.file_path,
-                        'line': suggestion.line_number,
+                        'position': diff_position,
                         'body': comment_body
                     })
-                    
-            if review_comments:
-                pr.create_review(
-                    body="Style guide review completed. High-confidence suggestions are provided as GitHub suggestions that you can apply with one click. Please review all suggestions below.",
-                    event="COMMENT",
-                    comments=review_comments
-                )
-                self.logger.info(f"Created {len(review_comments)} review suggestions")
+                
+                if review_comments:
+                    pr.create_review(
+                        body="Style guide review completed. High-confidence suggestions are provided as GitHub suggestions that you can apply with one click.",
+                        event="COMMENT",
+                        comments=review_comments
+                    )
+                    self.logger.info(f"Created {len(review_comments)} review suggestions on diff lines")
+            
+            # Create regular comments for suggestions not on changed lines
+            if regular_suggestions:
+                summary_body = "## Style Guide Suggestions\n\n"
+                summary_body += "The following suggestions are for lines not changed in this PR:\n\n"
+                
+                for suggestion in regular_suggestions:
+                    summary_body += f"### `{suggestion.file_path}` (line {suggestion.line_number})\n\n"
+                    summary_body += f"**{suggestion.explanation}**\n\n"
+                    summary_body += f"**Rule category:** {suggestion.rule_category}\n\n"
+                    summary_body += f"**Current:**\n```python\n{suggestion.original_text}\n```\n\n"
+                    summary_body += f"**Suggested:**\n```python\n{suggestion.suggested_text}\n```\n\n"
+                    summary_body += "---\n\n"
+                
+                pr.create_issue_comment(summary_body)
+                self.logger.info(f"Created summary comment for {len(regular_suggestions)} suggestions on non-diff lines")
                 
         except Exception as e:
             self.logger.error(f"Failed to create PR review suggestions: {e}")
