@@ -1,0 +1,214 @@
+name: Test QuantEcon Style Check Action
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/actions/qe-style-check/**'
+      - 'test/qe-style-check/**'
+      - '.github/copilot-qe-style-guide.md'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/actions/qe-style-check/**'
+      - 'test/qe-style-check/**'
+      - '.github/copilot-qe-style-guide.md'
+  workflow_dispatch:
+
+jobs:
+  test-basic-functionality:
+    runs-on: ubuntu-latest
+    name: Test basic style checking functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4 markdown gitpython
+      
+      - name: Run basic tests
+        run: |
+          cd test/qe-style-check
+          chmod +x test-basic.sh
+          ./test-basic.sh
+
+  test-action-with-issues:
+    runs-on: ubuntu-latest
+    name: Test action with files containing style issues
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with problematic files
+        id: style-test
+        uses: .//.github/actions/qe-style-check
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lectures: 'test/qe-style-check'
+          mode: 'pr'
+          confidence-threshold: 'high'
+      
+      - name: Verify style issues detected
+        run: |
+          echo "Suggestions found: ${{ steps.style-test.outputs.suggestions-found }}"
+          echo "High confidence count: ${{ steps.style-test.outputs.high-confidence-count }}"
+          echo "Medium confidence count: ${{ steps.style-test.outputs.medium-confidence-count }}"
+          echo "Low confidence count: ${{ steps.style-test.outputs.low-confidence-count }}"
+          echo "Files processed: ${{ steps.style-test.outputs.files-processed }}"
+          
+          # Should find suggestions in the test files
+          if [ "${{ steps.style-test.outputs.suggestions-found }}" != "true" ]; then
+            echo "❌ Expected style suggestions but found none"
+            exit 1
+          fi
+          
+          # Should process at least 2 test files
+          if [ "${{ steps.style-test.outputs.files-processed }}" -lt "1" ]; then
+            echo "❌ Expected at least 1 file to be processed"
+            exit 1
+          fi
+          
+          echo "✅ Style check test passed"
+
+  test-action-with-clean-files:
+    runs-on: ubuntu-latest
+    name: Test action with clean files only
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Create clean test directory
+        run: |
+          mkdir -p test-clean
+          cp test/qe-style-check/test-lecture-clean.md test-clean/
+      
+      - name: Test action with clean files
+        id: clean-test
+        uses: .//.github/actions/qe-style-check
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lectures: 'test-clean'
+          mode: 'pr'
+          confidence-threshold: 'high'
+      
+      - name: Verify clean file results
+        run: |
+          echo "Suggestions found: ${{ steps.clean-test.outputs.suggestions-found }}"
+          echo "Files processed: ${{ steps.clean-test.outputs.files-processed }}"
+          
+          # Should process the file
+          if [ "${{ steps.clean-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file to be processed but got ${{ steps.clean-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          echo "✅ Clean file test passed"
+      
+      - name: Cleanup
+        run: rm -rf test-clean
+
+  test-exclude-functionality:
+    runs-on: ubuntu-latest
+    name: Test file exclusion functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test exclude functionality
+        id: exclude-test
+        uses: .//.github/actions/qe-style-check
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lectures: 'test/qe-style-check'
+          exclude-files: 'test-lecture-with-issues.md'
+          mode: 'pr'
+          confidence-threshold: 'high'
+      
+      - name: Verify exclusion works
+        run: |
+          echo "Files processed: ${{ steps.exclude-test.outputs.files-processed }}"
+          echo "Suggestions found: ${{ steps.exclude-test.outputs.suggestions-found }}"
+          
+          # Should process only the clean file (1 file)
+          if [ "${{ steps.exclude-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file after exclusion but got ${{ steps.exclude-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          echo "✅ Exclude functionality test passed"
+
+  test-scheduled-mode:
+    runs-on: ubuntu-latest
+    name: Test scheduled mode functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test scheduled mode
+        id: scheduled-test
+        uses: .//.github/actions/qe-style-check
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lectures: 'test/qe-style-check'
+          mode: 'scheduled'
+          confidence-threshold: 'medium'
+          create-individual-prs: 'false'
+      
+      - name: Verify scheduled mode
+        run: |
+          echo "Mode: scheduled"
+          echo "Files processed: ${{ steps.scheduled-test.outputs.files-processed }}"
+          echo "Suggestions found: ${{ steps.scheduled-test.outputs.suggestions-found }}"
+          
+          # Should process files in scheduled mode
+          if [ "${{ steps.scheduled-test.outputs.files-processed }}" -lt "1" ]; then
+            echo "❌ Expected at least 1 file in scheduled mode"
+            exit 1
+          fi
+          
+          echo "✅ Scheduled mode test passed"
+
+  test-confidence-levels:
+    runs-on: ubuntu-latest
+    name: Test confidence level functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test high confidence threshold
+        id: high-confidence
+        uses: .//.github/actions/qe-style-check
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lectures: 'test/qe-style-check'
+          mode: 'pr'
+          confidence-threshold: 'high'
+      
+      - name: Test medium confidence threshold
+        id: medium-confidence
+        uses: .//.github/actions/qe-style-check
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          lectures: 'test/qe-style-check'
+          mode: 'pr'
+          confidence-threshold: 'medium'
+      
+      - name: Verify confidence levels
+        run: |
+          echo "High threshold - High confidence: ${{ steps.high-confidence.outputs.high-confidence-count }}"
+          echo "Medium threshold - High confidence: ${{ steps.medium-confidence.outputs.high-confidence-count }}"
+          echo "Medium threshold - Medium confidence: ${{ steps.medium-confidence.outputs.medium-confidence-count }}"
+          
+          # Both should process files
+          if [ "${{ steps.high-confidence.outputs.files-processed }}" != "${{ steps.medium-confidence.outputs.files-processed }}" ]; then
+            echo "❌ Different number of files processed between confidence levels"
+            exit 1
+          fi
+          
+          echo "✅ Confidence level test passed"

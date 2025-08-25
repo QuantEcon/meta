@@ -1,0 +1,86 @@
+name: 'QuantEcon Style Guide Checker'
+description: 'AI-enabled GitHub action to check lecture compliance with QuantEcon Style Guide'
+author: 'QuantEcon'
+
+inputs:
+  style-guide:
+    description: 'Path or URL to the QuantEcon style guide document'
+    required: false
+    default: '.github/copilot-qe-style-guide.md'
+  lectures:
+    description: 'Path to directory containing lecture documents (Myst Markdown .md files)'
+    required: false
+    default: 'lectures'
+  exclude-files:
+    description: 'Comma-separated list of file patterns to exclude (supports regex)'
+    required: false
+    default: ''
+  mode:
+    description: 'Operation mode: "pr" for pull request mode, "scheduled" for complete review'
+    required: false
+    default: 'pr'
+  confidence-threshold:
+    description: 'Minimum confidence level for auto-commit (high, medium, low)'
+    required: false
+    default: 'high'
+  create-individual-prs:
+    description: 'Create individual PRs per lecture in scheduled mode'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token for API access'
+    required: true
+
+outputs:
+  suggestions-found:
+    description: 'Whether style suggestions were found (true/false)'
+    value: ${{ steps.check.outputs.suggestions-found }}
+  high-confidence-count:
+    description: 'Number of high confidence suggestions'
+    value: ${{ steps.check.outputs.high-confidence-count }}
+  medium-confidence-count:
+    description: 'Number of medium confidence suggestions'
+    value: ${{ steps.check.outputs.medium-confidence-count }}
+  low-confidence-count:
+    description: 'Number of low confidence suggestions'
+    value: ${{ steps.check.outputs.low-confidence-count }}
+  files-processed:
+    description: 'Number of files processed'
+    value: ${{ steps.check.outputs.files-processed }}
+  summary-report:
+    description: 'Summary report of suggestions'
+    value: ${{ steps.check.outputs.summary-report }}
+  detailed-report:
+    description: 'Detailed report with suggestions table'
+    value: ${{ steps.check.outputs.detailed-report }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python for style checking
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        pip install requests beautifulsoup4 markdown gitpython openai
+
+    - name: Run style guide checker
+      id: check
+      shell: bash
+      run: ${{ github.action_path }}/style-check.sh
+      env:
+        INPUT_STYLE_GUIDE: ${{ inputs.style-guide }}
+        INPUT_LECTURES: ${{ inputs.lectures }}
+        INPUT_EXCLUDE_FILES: ${{ inputs.exclude-files }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_CONFIDENCE_THRESHOLD: ${{ inputs.confidence-threshold }}
+        INPUT_CREATE_INDIVIDUAL_PRS: ${{ inputs.create-individual-prs }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+
+branding:
+  icon: 'check-circle'
+  color: 'blue'
