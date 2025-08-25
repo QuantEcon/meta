@@ -54,6 +54,9 @@ outputs:
   warning-details:
     description: 'Details of warnings found'
     value: ${{ steps.check.outputs.warning-details }}
+  detailed-report:
+    description: 'Detailed markdown report of warnings found'
+    value: ${{ steps.check.outputs.detailed-report }}
   issue-url:
     description: 'URL of the created GitHub issue (if create-issue is enabled)'
     value: ${{ steps.create-issue.outputs.issue-url }}
