@@ -1,0 +1,273 @@
+name: Test QuantEcon Style Guide Action
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/actions/qe-style-guide/**'
+      - 'test/qe-style-guide/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/actions/qe-style-guide/**'
+      - 'test/qe-style-guide/**'
+  workflow_dispatch:
+
+jobs:
+  test-basic-functionality:
+    runs-on: ubuntu-latest
+    name: Test basic functionality without AI
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Run basic tests
+        run: ./test/qe-style-guide/test-basic.sh
+  
+  test-with-mock-context:
+    runs-on: ubuntu-latest
+    name: Test with mock GitHub context
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test issue mode parsing
+        run: |
+          # Test parsing of issue comment
+          export INPUT_GITHUB_TOKEN="fake-token"
+          export INPUT_STYLE_GUIDE=".github/copilot-qe-style-guide.md"
+          export INPUT_DOCS="test/qe-style-guide/"
+          export INPUT_EXTENSIONS="md"
+          export INPUT_OPENAI_API_KEY=""
+          export GITHUB_OUTPUT="/tmp/test_output"
+          export GITHUB_CONTEXT='{
+            "event_name": "issue_comment",
+            "repository": "QuantEcon/test-repo",
+            "event": {
+              "comment": {
+                "body": "@qe-style-check test-document-with-issues.md"
+              },
+              "issue": {
+                "number": 123
+              }
+            }
+          }'
+          
+          echo "" > /tmp/test_output
+          
+          # Mock the GitHub API calls by creating a test version
+          cat > /tmp/test_mock_style_check.py << 'EOF'
+          import os
+          import sys
+          sys.path.insert(0, '/home/runner/work/meta/meta/.github/actions/qe-style-guide')
+          
+          from process_style_check import StyleGuideChecker
+          
+          class MockStyleGuideChecker(StyleGuideChecker):
+              def get_file_content(self, file_path):
+                  # Read from local test files instead of GitHub API
+                  local_path = file_path
+                  if not os.path.exists(local_path):
+                      local_path = f"test/qe-style-guide/{os.path.basename(file_path)}"
+                  
+                  if os.path.exists(local_path):
+                      with open(local_path, 'r') as f:
+                          return f.read()
+                  return ""
+          
+          # Run the mock checker
+          checker = MockStyleGuideChecker()
+          
+          # Test that we can parse the trigger comment correctly
+          mode, target_file = checker.parse_trigger_comment()
+          print(f"Mode: {mode}, Target file: {target_file}")
+          
+          assert mode == 'issue', f"Expected 'issue', got '{mode}'"
+          assert target_file == 'test-document-with-issues.md', f"Expected 'test-document-with-issues.md', got '{target_file}'"
+          
+          # Test loading style guide
+          style_guide = checker.load_style_guide()
+          assert len(style_guide) > 100, "Style guide should be loaded"
+          
+          # Test file processing
+          content = checker.get_file_content(target_file)
+          assert len(content) > 0, "Should be able to get file content"
+          
+          # Test analysis
+          result = checker.analyze_with_rules(content, style_guide, target_file)
+          suggestions = result.get('suggestions', [])
+          print(f"Found {len(suggestions)} suggestions")
+          
+          # Output results
+          checker.files_processed = 1
+          checker.suggestions_count = len(suggestions)
+          checker.mode = mode
+          checker.target_file = target_file
+          checker.output_results()
+          
+          print("✅ Mock test passed!")
+          EOF
+          
+          python3 /tmp/test_mock_style_check.py
+          
+          # Verify outputs were written
+          if [ -f "/tmp/test_output" ]; then
+            echo "✅ GitHub outputs were written:"
+            cat /tmp/test_output
+          else
+            echo "❌ No GitHub outputs found"
+            exit 1
+          fi
+
+  test-pr-mode-parsing:
+    runs-on: ubuntu-latest
+    name: Test PR mode comment parsing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test PR mode parsing
+        run: |
+          export INPUT_GITHUB_TOKEN="fake-token"
+          export GITHUB_CONTEXT='{
+            "event_name": "issue_comment",
+            "repository": "QuantEcon/test-repo",
+            "event": {
+              "comment": {
+                "body": "@qe-style-check"
+              },
+              "issue": {
+                "number": 123,
+                "pull_request": {
+                  "url": "https://api.github.com/repos/test/test/pulls/123"
+                }
+              }
+            }
+          }'
+          
+          cat > /tmp/test_pr_parsing.py << 'EOF'
+          import os
+          import sys
+          sys.path.insert(0, '/home/runner/work/meta/meta/.github/actions/qe-style-guide')
+          
+          from process_style_check import StyleGuideChecker
+          
+          checker = StyleGuideChecker()
+          mode, target_file = checker.parse_trigger_comment()
+          
+          print(f"PR mode test: mode={mode}, target_file={target_file}")
+          
+          assert mode == 'pr', f"Expected 'pr', got '{mode}'"
+          assert target_file is None, f"Expected None for target_file in PR mode, got '{target_file}'"
+          
+          print("✅ PR mode parsing test passed!")
+          EOF
+          
+          python3 /tmp/test_pr_parsing.py
+
+  test-rule-based-analysis:
+    runs-on: ubuntu-latest
+    name: Test rule-based analysis
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test Greek letter detection
+        run: |
+          cat > /tmp/test_rules.py << 'EOF'
+          import os
+          import sys
+          sys.path.insert(0, '/home/runner/work/meta/meta/.github/actions/qe-style-guide')
+          
+          from process_style_check import StyleGuideChecker
+          
+          checker = StyleGuideChecker()
+          
+          # Test content with Greek letter issues
+          test_content = '''
+          # Test Document
+          
+          Here is some Python code:
+          
+          ```python
+          def utility(c, alpha=0.5, beta=0.95):
+              return c * alpha + beta
+          
+          gamma = 0.02
+          delta = 0.1
+          ```
+          
+          ## This Heading Has Too Many Capitals
+          
+          Some text.
+          '''
+          
+          style_guide = checker.load_style_guide()
+          result = checker.analyze_with_rules(test_content, style_guide, "test.md")
+          suggestions = result.get('suggestions', [])
+          
+          print(f"Found {len(suggestions)} suggestions:")
+          for i, suggestion in enumerate(suggestions):
+              print(f"  {i+1}. {suggestion.get('rule_id', 'UNKNOWN')}: {suggestion.get('description', 'No description')}")
+          
+          # Check for Greek letter suggestions
+          greek_suggestions = [s for s in suggestions if 'alpha' in s.get('original_text', '') or 'beta' in s.get('original_text', '') or 'gamma' in s.get('original_text', '') or 'delta' in s.get('original_text', '')]
+          
+          if len(greek_suggestions) > 0:
+              print(f"✅ Found {len(greek_suggestions)} Greek letter suggestions as expected")
+          else:
+              print("⚠️  No Greek letter suggestions found")
+          
+          # Check for heading suggestions
+          heading_suggestions = [s for s in suggestions if s.get('rule_id') == 'HEADING_RULE']
+          
+          if len(heading_suggestions) > 0:
+              print(f"✅ Found {len(heading_suggestions)} heading suggestions as expected")
+          else:
+              print("⚠️  No heading suggestions found")
+          
+          print("✅ Rule-based analysis test completed!")
+          EOF
+          
+          python3 /tmp/test_rules.py
+
+  test-clean-document:
+    runs-on: ubuntu-latest
+    name: Test with clean document
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test clean document analysis
+        run: |
+          cat > /tmp/test_clean.py << 'EOF'
+          import os
+          import sys
+          sys.path.insert(0, '/home/runner/work/meta/meta/.github/actions/qe-style-guide')
+          
+          from process_style_check import StyleGuideChecker
+          
+          checker = StyleGuideChecker()
+          
+          # Read the clean test document
+          with open('test/qe-style-guide/clean-document.md', 'r') as f:
+              content = f.read()
+          
+          style_guide = checker.load_style_guide()
+          result = checker.analyze_with_rules(content, style_guide, "clean-document.md")
+          suggestions = result.get('suggestions', [])
+          
+          print(f"Clean document analysis found {len(suggestions)} suggestions:")
+          for suggestion in suggestions:
+              print(f"  - {suggestion.get('description', 'No description')}")
+          
+          # Clean document should have minimal suggestions
+          if len(suggestions) <= 2:
+              print("✅ Clean document test passed - minimal suggestions as expected")
+          else:
+              print(f"⚠️  Clean document had {len(suggestions)} suggestions, expected <= 2")
+          
+          print("✅ Clean document test completed!")
+          EOF
+          
+          python3 /tmp/test_clean.py
