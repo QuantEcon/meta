@@ -1,6 +1,6 @@
 name: Test QuantEcon Style Guide Action
 
-on:
+"on":
   push:
     branches: [ main ]
     paths:

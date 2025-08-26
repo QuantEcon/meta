@@ -1,6 +1,6 @@
 name: QuantEcon Style Guide Check
 
-on:
+"on":
   issue_comment:
     types: [created]
 
