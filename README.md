@@ -17,7 +17,7 @@ A GitHub Action that scans HTML files for Python warnings and optionally fails t
   uses: QuantEcon/meta/.github/actions/check-warnings@main
   with:
     html-path: './_build/html'
-    warnings: 'SyntaxWarning,DeprecationWarning,FutureWarning'
+    # Uses comprehensive default warnings (all Python warning types)
     fail-on-warning: 'true'
 ```
 
@@ -45,3 +45,23 @@ A GitHub Action that validates web links in HTML files with AI-powered suggestio
 **Use case**: Perfect for MyST Markdown/Jupyter Book projects. Provides weekly scheduled scans and PR-specific validation with AI suggestions for broken or outdated links.
 
 See the [action documentation](./.github/actions/link-checker/README.md) for detailed usage instructions and examples.
+
+### Weekly Report Action
+
+A GitHub Action that generates a weekly report summarizing issues and PR activity across all QuantEcon repositories.
+
+**Location**: `.github/actions/weekly-report`
+
+**Usage**:
+```yaml
+- name: Generate weekly report
+  uses: QuantEcon/meta/.github/actions/weekly-report@main
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    organization: 'QuantEcon'
+    output-format: 'markdown'
+```
+
+**Use case**: Automated weekly reporting on repository activity including opened/closed issues and merged PRs. Runs automatically every Saturday and creates an issue with the report.
+
+See the [action documentation](./.github/actions/weekly-report/README.md) for detailed usage instructions and examples.

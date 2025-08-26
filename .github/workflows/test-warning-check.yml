@@ -3,8 +3,14 @@ name: Test Warning Check Action
 on:
   push:
     branches: [ main ]
+    paths:
+      - '.github/actions/check-warnings/**'
+      - 'test/check-warnings/**'
   pull_request:
     branches: [ main ]
+    paths:
+      - '.github/actions/check-warnings/**'
+      - 'test/check-warnings/**'
   workflow_dispatch:
 
 jobs:
@@ -83,3 +89,237 @@ jobs:
             exit 1
           fi
           echo "✅ Fail-on-warning test passed"
+
+  test-new-warning-types:
+    runs-on: ubuntu-latest
+    name: Test new warning types (UserWarning, RuntimeWarning, etc.)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with new warning types
+        id: new-warning-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/check-warnings/with-new-warnings.html'
+          fail-on-warning: 'false'
+      
+      - name: Verify new warning types are detected
+        run: |
+          echo "Warnings found: ${{ steps.new-warning-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.new-warning-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.new-warning-test.outputs.warning-details }}"
+          if [ "${{ steps.new-warning-test.outputs.warnings-found }}" != "true" ]; then
+            echo "❌ Expected new warning types to be found but found none"
+            exit 1
+          fi
+          if [ "${{ steps.new-warning-test.outputs.warning-count }}" -lt "5" ]; then
+            echo "❌ Expected at least 5 new warning types but found ${{ steps.new-warning-test.outputs.warning-count }}"
+            exit 1
+          fi
+          # Check that specific new warning types are detected
+          if [[ "${{ steps.new-warning-test.outputs.warning-details }}" != *"UserWarning"* ]]; then
+            echo "❌ UserWarning not detected"
+            exit 1
+          fi
+          if [[ "${{ steps.new-warning-test.outputs.warning-details }}" != *"RuntimeWarning"* ]]; then
+            echo "❌ RuntimeWarning not detected"
+            exit 1
+          fi
+          if [[ "${{ steps.new-warning-test.outputs.warning-details }}" != *"ResourceWarning"* ]]; then
+            echo "❌ ResourceWarning not detected"
+            exit 1
+          fi
+          echo "✅ New warning types test passed"
+
+  test-exclude-warning-single:
+    runs-on: ubuntu-latest
+    name: Test exclude-warning with single warning type
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with single warning exclusion
+        id: exclude-single-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/check-warnings/exclude-test.html'
+          exclude-warning: 'UserWarning'
+          fail-on-warning: 'false'
+      
+      - name: Verify single exclusion results
+        run: |
+          echo "Warnings found: ${{ steps.exclude-single-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.exclude-single-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.exclude-single-test.outputs.warning-details }}"
+          
+          # Should find warnings (DeprecationWarning, RuntimeWarning, ResourceWarning) but not UserWarning
+          if [ "${{ steps.exclude-single-test.outputs.warnings-found }}" != "true" ]; then
+            echo "❌ Expected warnings but found none after excluding UserWarning"
+            exit 1
+          fi
+          
+          # Should find 3 warnings (excluding UserWarning)
+          if [ "${{ steps.exclude-single-test.outputs.warning-count }}" -ne "3" ]; then
+            echo "❌ Expected 3 warnings but found ${{ steps.exclude-single-test.outputs.warning-count }}"
+            exit 1
+          fi
+          
+          # Should NOT contain UserWarning
+          if [[ "${{ steps.exclude-single-test.outputs.warning-details }}" == *"UserWarning"* ]]; then
+            echo "❌ UserWarning was found but should have been excluded"
+            exit 1
+          fi
+          
+          # Should contain other warnings
+          if [[ "${{ steps.exclude-single-test.outputs.warning-details }}" != *"DeprecationWarning"* ]]; then
+            echo "❌ DeprecationWarning not found"
+            exit 1
+          fi
+          
+          echo "✅ Single exclude-warning test passed"
+
+  test-exclude-warning-multiple:
+    runs-on: ubuntu-latest
+    name: Test exclude-warning with multiple warning types
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with multiple warning exclusions
+        id: exclude-multiple-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/check-warnings/exclude-test.html'
+          exclude-warning: 'UserWarning,RuntimeWarning'
+          fail-on-warning: 'false'
+      
+      - name: Verify multiple exclusion results
+        run: |
+          echo "Warnings found: ${{ steps.exclude-multiple-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.exclude-multiple-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.exclude-multiple-test.outputs.warning-details }}"
+          
+          # Should find warnings (DeprecationWarning, ResourceWarning) but not UserWarning or RuntimeWarning
+          if [ "${{ steps.exclude-multiple-test.outputs.warnings-found }}" != "true" ]; then
+            echo "❌ Expected warnings but found none after excluding UserWarning and RuntimeWarning"
+            exit 1
+          fi
+          
+          # Should find 2 warnings (excluding UserWarning and RuntimeWarning)
+          if [ "${{ steps.exclude-multiple-test.outputs.warning-count }}" -ne "2" ]; then
+            echo "❌ Expected 2 warnings but found ${{ steps.exclude-multiple-test.outputs.warning-count }}"
+            exit 1
+          fi
+          
+          # Should NOT contain excluded warnings
+          if [[ "${{ steps.exclude-multiple-test.outputs.warning-details }}" == *"UserWarning"* ]]; then
+            echo "❌ UserWarning was found but should have been excluded"
+            exit 1
+          fi
+          if [[ "${{ steps.exclude-multiple-test.outputs.warning-details }}" == *"RuntimeWarning"* ]]; then
+            echo "❌ RuntimeWarning was found but should have been excluded"
+            exit 1
+          fi
+          
+          # Should contain non-excluded warnings
+          if [[ "${{ steps.exclude-multiple-test.outputs.warning-details }}" != *"DeprecationWarning"* ]]; then
+            echo "❌ DeprecationWarning not found"
+            exit 1
+          fi
+          if [[ "${{ steps.exclude-multiple-test.outputs.warning-details }}" != *"ResourceWarning"* ]]; then
+            echo "❌ ResourceWarning not found"
+            exit 1
+          fi
+          
+          echo "✅ Multiple exclude-warning test passed"
+
+  test-exclude-warning-all:
+    runs-on: ubuntu-latest
+    name: Test exclude-warning excluding all warnings
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with all warnings excluded
+        id: exclude-all-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/check-warnings/exclude-test.html'
+          exclude-warning: 'UserWarning,DeprecationWarning,RuntimeWarning,ResourceWarning'
+          fail-on-warning: 'false'
+      
+      - name: Verify all exclusion results
+        run: |
+          echo "Warnings found: ${{ steps.exclude-all-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.exclude-all-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.exclude-all-test.outputs.warning-details }}"
+          
+          # Should find no warnings (all excluded)
+          if [ "${{ steps.exclude-all-test.outputs.warnings-found }}" != "false" ]; then
+            echo "❌ Expected no warnings but found some after excluding all"
+            exit 1
+          fi
+          
+          if [ "${{ steps.exclude-all-test.outputs.warning-count }}" -ne "0" ]; then
+            echo "❌ Expected 0 warnings but found ${{ steps.exclude-all-test.outputs.warning-count }}"
+            exit 1
+          fi
+          
+          echo "✅ All exclude-warning test passed"
+
+  test-exclude-warning-with-custom-warnings:
+    runs-on: ubuntu-latest
+    name: Test exclude-warning with custom warning list
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with custom warnings and exclusions
+        id: exclude-custom-test
+        uses: .//.github/actions/check-warnings
+        with:
+          html-path: './test/check-warnings/exclude-test.html'
+          warnings: 'UserWarning,DeprecationWarning,RuntimeWarning'
+          exclude-warning: 'RuntimeWarning'
+          fail-on-warning: 'false'
+      
+      - name: Verify custom warning exclusion results
+        run: |
+          echo "Warnings found: ${{ steps.exclude-custom-test.outputs.warnings-found }}"
+          echo "Warning count: ${{ steps.exclude-custom-test.outputs.warning-count }}"
+          echo "Warning details: ${{ steps.exclude-custom-test.outputs.warning-details }}"
+          
+          # Should find UserWarning and DeprecationWarning but not RuntimeWarning or ResourceWarning
+          if [ "${{ steps.exclude-custom-test.outputs.warnings-found }}" != "true" ]; then
+            echo "❌ Expected warnings but found none with custom warnings and exclusion"
+            exit 1
+          fi
+          
+          # Should find 2 warnings (UserWarning, DeprecationWarning)
+          if [ "${{ steps.exclude-custom-test.outputs.warning-count }}" -ne "2" ]; then
+            echo "❌ Expected 2 warnings but found ${{ steps.exclude-custom-test.outputs.warning-count }}"
+            exit 1
+          fi
+          
+          # Should NOT contain RuntimeWarning or ResourceWarning
+          if [[ "${{ steps.exclude-custom-test.outputs.warning-details }}" == *"RuntimeWarning"* ]]; then
+            echo "❌ RuntimeWarning was found but should have been excluded"
+            exit 1
+          fi
+          if [[ "${{ steps.exclude-custom-test.outputs.warning-details }}" == *"ResourceWarning"* ]]; then
+            echo "❌ ResourceWarning was found but should not be in custom warning list"
+            exit 1
+          fi
+          
+          # Should contain UserWarning and DeprecationWarning
+          if [[ "${{ steps.exclude-custom-test.outputs.warning-details }}" != *"UserWarning"* ]]; then
+            echo "❌ UserWarning not found"
+            exit 1
+          fi
+          if [[ "${{ steps.exclude-custom-test.outputs.warning-details }}" != *"DeprecationWarning"* ]]; then
+            echo "❌ DeprecationWarning not found"
+            exit 1
+          fi
+          
+          echo "✅ Custom warning exclusion test passed"

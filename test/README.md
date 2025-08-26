@@ -14,6 +14,8 @@ Each GitHub Action has its own test subdirectory:
   - `good-links.html` - HTML file with working external links (negative test case)
   - `broken-links.html` - HTML file with broken and problematic links (positive test case)
   - `redirect-links.html` - HTML file with redirected links for AI suggestion testing
+- `weekly-report/` - Tests for the `.github/actions/weekly-report` action
+  - `test-basic.sh` - Basic functionality test for the weekly report action
 
 ## Running Tests
 
@@ -21,3 +23,4 @@ Tests are automatically run by the GitHub Actions workflows in `.github/workflow
 
 - For the `check-warnings` action, tests are run by the `test-warning-check.yml` workflow.
 - For the `link-checker` action, tests are run by the `test-link-checker.yml` workflow.
+- For the `weekly-report` action, tests are run by the `test-weekly-report.yml` workflow.
