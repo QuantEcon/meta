@@ -88,6 +88,67 @@ api_call() {
     done
 }
 
+# Function to get all pages of an API endpoint and combine results
+api_call_all_pages() {
+    local endpoint="$1"
+    local combined_results="[]"
+    local page=1
+    local max_pages=10  # Safety limit to prevent infinite loops
+    
+    echo "Fetching all pages for endpoint: $endpoint" >&2
+    
+    while [ $page -le $max_pages ]; do
+        echo "Fetching page $page..." >&2
+        local response=$(api_call "$endpoint" "$page")
+        local exit_code=$?
+        
+        # If API call failed, return what we have so far
+        if [ $exit_code -ne 0 ]; then
+            echo "API call failed on page $page, returning partial results" >&2
+            echo "$combined_results"
+            return $exit_code
+        fi
+        
+        # Check if response contains an error
+        if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+            echo "Error response on page $page, returning partial results" >&2
+            echo "$combined_results"
+            return 1
+        fi
+        
+        # Get the page results and ensure it's an array
+        local page_results
+        if echo "$response" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            page_results="$response"
+        else
+            echo "Response is not an array on page $page, stopping pagination" >&2
+            break
+        fi
+        
+        # If this page is empty, we've reached the end
+        local page_length=$(echo "$page_results" | jq 'length')
+        if [ "$page_length" -eq 0 ]; then
+            echo "No more results on page $page, stopping pagination" >&2
+            break
+        fi
+        
+        # Combine results using jq array concatenation
+        combined_results=$(jq -n --argjson current "$combined_results" --argjson new "$page_results" '$current + $new')
+        
+        # If we got less than 100 results, this is likely the last page, but let's check the next page to be sure
+        if [ "$page_length" -lt 100 ]; then
+            echo "Got less than 100 results on page $page, checking if this is the last page" >&2
+            # For now, let's continue to the next page to be absolutely sure
+            # The next iteration will get an empty page and break naturally
+        fi
+        
+        page=$((page + 1))
+    done
+    
+    echo "Fetched $(echo "$combined_results" | jq 'length') total results across $((page - 1)) pages" >&2
+    echo "$combined_results"
+}
+
 # Get repositories with recent activity using GitHub Search API
 echo "Fetching repositories with recent activity for ${ORGANIZATION}..."
 
@@ -177,8 +238,8 @@ while IFS= read -r repo; do
     
     echo "Processing repository: $repo"
     
-    # Count total current open issues
-    current_issues_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues?state=open")
+    # Count total current open issues (using pagination to get all results)
+    current_issues_response=$(api_call_all_pages "/repos/${ORGANIZATION}/${repo}/issues?state=open")
     if [ $? -eq 0 ]; then
         current_issues=$(echo "$current_issues_response" | jq 'if type == "array" then [.[] | select(.pull_request == null)] | length else 0 end')
     else
@@ -190,8 +251,8 @@ while IFS= read -r repo; do
         fi
     fi
     
-    # Count opened issues in the last week
-    opened_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues")
+    # Count opened issues in the last week (using pagination to get all results)
+    opened_response=$(api_call_all_pages "/repos/${ORGANIZATION}/${repo}/issues")
     if [ $? -eq 0 ]; then
         opened_issues=$(echo "$opened_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.created_at >= $since and .pull_request == null)] | length else 0 end')
     else
@@ -203,8 +264,8 @@ while IFS= read -r repo; do
         fi
     fi
     
-    # Count closed issues in the last week
-    closed_response=$(api_call "/repos/${ORGANIZATION}/${repo}/issues?state=closed")
+    # Count closed issues in the last week (using pagination to get all results)
+    closed_response=$(api_call_all_pages "/repos/${ORGANIZATION}/${repo}/issues?state=closed")
     if [ $? -eq 0 ]; then
         closed_issues=$(echo "$closed_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.closed_at != null and .closed_at >= $since and .pull_request == null)] | length else 0 end')
     else
@@ -216,16 +277,33 @@ while IFS= read -r repo; do
         fi
     fi
     
-    # Count merged PRs in the last week
-    prs_response=$(api_call "/repos/${ORGANIZATION}/${repo}/pulls?state=closed")
-    if [ $? -eq 0 ]; then
-        merged_prs=$(echo "$prs_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.merged_at != null and .merged_at >= $since)] | length else 0 end')
+    # Count merged PRs in the last week using GitHub Search API (more efficient)
+    # Format dates for search query (GitHub search uses different date format)
+    SEARCH_WEEK_AGO=$(date -d "$WEEK_AGO" +"%Y-%m-%d")
+    search_query="repo:${ORGANIZATION}/${repo} is:pr is:merged merged:>=${SEARCH_WEEK_AGO}"
+    
+    # Try search API first (more efficient for recent items)
+    search_response=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" \
+                           -H "Accept: application/vnd.github.v3+json" \
+                           "https://api.github.com/search/issues?q=$(echo "$search_query" | sed 's/ /%20/g')&per_page=100")
+    
+    if echo "$search_response" | jq -e '.total_count' >/dev/null 2>&1; then
+        # Search API worked, use its results
+        merged_prs=$(echo "$search_response" | jq '.total_count // 0')
+        echo "Used search API for $repo: found $merged_prs merged PRs" >&2
     else
-        merged_prs=0
-        if echo "$prs_response" | jq -e '.error' 2>/dev/null | grep -q "rate_limit"; then
-            rate_limited_repos=$((rate_limited_repos + 1))
+        # Fall back to paginated pulls API
+        echo "Search API failed for $repo, falling back to pulls API" >&2
+        prs_response=$(api_call_all_pages "/repos/${ORGANIZATION}/${repo}/pulls?state=closed")
+        if [ $? -eq 0 ]; then
+            merged_prs=$(echo "$prs_response" | jq --arg since "$WEEK_AGO" 'if type == "array" then [.[] | select(.merged_at != null and .merged_at >= $since)] | length else 0 end')
         else
-            failed_repos=$((failed_repos + 1))
+            merged_prs=0
+            if echo "$prs_response" | jq -e '.error' 2>/dev/null | grep -q "rate_limit"; then
+                rate_limited_repos=$((rate_limited_repos + 1))
+            else
+                failed_repos=$((failed_repos + 1))
+            fi
         fi
     fi
     

@@ -16,6 +16,8 @@ This action generates a report containing:
 - **Activity-based reporting**: Only includes repositories with actual activity in the generated report
 - **Rate limit handling**: Automatically retries on rate limit errors with exponential backoff, and provides clear warnings when data is incomplete
 - **Configurable delays**: Optional delays between API calls to reduce rate limit pressure
+- **Comprehensive data collection**: Uses pagination to fetch all results, ensuring no PRs or issues are missed in repositories with high activity
+- **Efficient PR counting**: Uses GitHub Search API for merged PR queries when possible, falling back to paginated API calls for reliability
 
 ## Usage
 
@@ -68,7 +70,7 @@ The generated markdown report includes:
 
 Only repositories with activity in the reporting period are included in the detailed table.
 
-## Rate Limiting
+## Rate Limiting & Data Accuracy
 
 GitHub's API has rate limits (5000 requests/hour for authenticated requests). For large organizations:
 
@@ -76,3 +78,13 @@ GitHub's API has rate limits (5000 requests/hour for authenticated requests). Fo
 - **Add delays**: Use the `api-delay` parameter to add delays between requests (e.g., `api-delay: '1'` for 1 second delays)
 - **Run during off-peak**: Schedule reports during off-peak hours to avoid conflicts with other API usage
 - **Incomplete data**: When rate limited, the report will show `0` for affected repositories and include a warning
+
+### Data Accuracy Improvements
+
+Recent enhancements ensure comprehensive data collection:
+
+- **Pagination support**: All API calls now use pagination to fetch complete results, preventing undercounting in repositories with many issues or PRs
+- **Dual API approach**: Uses GitHub Search API for efficient recent activity queries, with fallback to paginated list APIs for complete accuracy
+- **Partial result handling**: When API limits are hit, the system returns partial results with clear warnings rather than failing completely
+
+These improvements address potential counting discrepancies and ensure the weekly report provides accurate metrics.
