@@ -18,6 +18,7 @@ def extract_code_blocks(html_content):
     """Extract Python code blocks from HTML content"""
     soup = BeautifulSoup(html_content, 'html.parser')
     code_blocks = []
+    processed_content = set()  # Track processed content to avoid duplicates
     
     # Look for various patterns that indicate code cells
     patterns = [
@@ -28,8 +29,6 @@ def extract_code_blocks(html_content):
         {'class': re.compile(r'.*highlight.*python.*')},
         # MyST-NB style
         {'class': re.compile(r'.*language-python.*')},
-        # Generic code blocks
-        {'class': re.compile(r'.*python.*')},
     ]
     
     for pattern in patterns:
@@ -39,13 +38,19 @@ def extract_code_blocks(html_content):
             code_text = element.get_text()
             
             # Clean up the code
-            code_text = clean_code_block(code_text)
+            cleaned_code = clean_code_block(code_text)
             
-            if code_text and is_python_code(code_text):
+            # Use a hash of the cleaned content to detect duplicates
+            content_hash = hash(cleaned_code.strip())
+            if content_hash in processed_content:
+                continue
+            
+            if cleaned_code and is_python_code(cleaned_code):
+                processed_content.add(content_hash)
                 code_blocks.append({
-                    'content': code_text,
+                    'content': cleaned_code,
                     'element_class': element.get('class', []),
-                    'line_start': get_line_number(html_content, str(element))
+                    'line_start': get_line_number(html_content, str(element)[:100])
                 })
     
     # Also look for <pre><code> blocks with Python indicators
@@ -57,13 +62,19 @@ def extract_code_blocks(html_content):
             classes = ' '.join(code_element.get('class', []))
             if 'python' in classes.lower() or 'py' in classes.lower():
                 code_text = code_element.get_text()
-                code_text = clean_code_block(code_text)
+                cleaned_code = clean_code_block(code_text)
                 
-                if code_text and is_python_code(code_text):
+                # Use a hash of the cleaned content to detect duplicates
+                content_hash = hash(cleaned_code.strip())
+                if content_hash in processed_content:
+                    continue
+                
+                if cleaned_code and is_python_code(cleaned_code):
+                    processed_content.add(content_hash)
                     code_blocks.append({
-                        'content': code_text,
+                        'content': cleaned_code,
                         'element_class': code_element.get('class', []),
-                        'line_start': get_line_number(html_content, str(pre))
+                        'line_start': get_line_number(html_content, str(pre)[:100])
                     })
     
     return code_blocks

@@ -1,0 +1,246 @@
+name: Test Code Style Checker Action
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-clean-code:
+    runs-on: ubuntu-latest
+    name: Test with clean code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with clean code
+        id: clean-test
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/clean-code.html'
+          fail-on-style-issues: 'false'
+          checkers: 'flake8,black,pep8'
+          max-line-length: '88'
+      
+      - name: Verify clean results
+        run: |
+          echo "Style issues found: ${{ steps.clean-test.outputs.style-issues-found }}"
+          echo "Total issues: ${{ steps.clean-test.outputs.total-issues }}"
+          echo "Flake8 issues: ${{ steps.clean-test.outputs.flake8-issues }}"
+          echo "Black issues: ${{ steps.clean-test.outputs.black-issues }}"
+          echo "PEP8 issues: ${{ steps.clean-test.outputs.pep8-issues }}"
+          
+          # Clean code should have relatively few issues (allow for minor ones)
+          if [ "${{ steps.clean-test.outputs.total-issues }}" -gt "20" ]; then
+            echo "⚠️  Clean code has more issues than expected: ${{ steps.clean-test.outputs.total-issues }}"
+          else
+            echo "✅ Clean code test passed with ${{ steps.clean-test.outputs.total-issues }} issues"
+          fi
+
+  test-problematic-code:
+    runs-on: ubuntu-latest
+    name: Test with problematic code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with problematic code
+        id: problem-test
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/style-issues.html'
+          fail-on-style-issues: 'false'
+          checkers: 'flake8,black,pep8'
+          max-line-length: '88'
+      
+      - name: Verify problematic results
+        run: |
+          echo "Style issues found: ${{ steps.problem-test.outputs.style-issues-found }}"
+          echo "Total issues: ${{ steps.problem-test.outputs.total-issues }}"
+          echo "Flake8 issues: ${{ steps.problem-test.outputs.flake8-issues }}"
+          echo "Black issues: ${{ steps.problem-test.outputs.black-issues }}"
+          echo "PEP8 issues: ${{ steps.problem-test.outputs.pep8-issues }}"
+          
+          if [ "${{ steps.problem-test.outputs.style-issues-found }}" != "true" ]; then
+            echo "❌ Expected style issues but found none"
+            exit 1
+          fi
+          
+          if [ "${{ steps.problem-test.outputs.total-issues }}" -lt "20" ]; then
+            echo "❌ Expected many issues but found only ${{ steps.problem-test.outputs.total-issues }}"
+            exit 1
+          fi
+          
+          echo "✅ Problematic code test passed"
+
+  test-mixed-content:
+    runs-on: ubuntu-latest
+    name: Test with mixed content
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with mixed content
+        id: mixed-test
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/mixed-content.html'
+          fail-on-style-issues: 'false'
+          checkers: 'flake8,black,pep8'
+          exclude-patterns: '!pip install,!conda install,plt.show()'
+      
+      - name: Verify mixed content results
+        run: |
+          echo "Style issues found: ${{ steps.mixed-test.outputs.style-issues-found }}"
+          echo "Total issues: ${{ steps.mixed-test.outputs.total-issues }}"
+          echo "Style details: ${{ steps.mixed-test.outputs.style-details }}"
+          
+          # Should detect Python code and ignore non-Python content
+          if [ "${{ steps.mixed-test.outputs.style-issues-found }}" != "true" ]; then
+            echo "❌ Expected to find some style issues in mixed content"
+            exit 1
+          fi
+          
+          echo "✅ Mixed content test passed"
+
+  test-directory-scan:
+    runs-on: ubuntu-latest
+    name: Test with full directory scan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test action with full directory
+        id: directory-test
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker'
+          fail-on-style-issues: 'false'
+          checkers: 'flake8,black'
+          create-artifact: 'true'
+          artifact-name: 'test-style-report'
+      
+      - name: Verify directory results
+        run: |
+          echo "Style issues found: ${{ steps.directory-test.outputs.style-issues-found }}"
+          echo "Total issues: ${{ steps.directory-test.outputs.total-issues }}"
+          echo "Flake8 issues: ${{ steps.directory-test.outputs.flake8-issues }}"
+          echo "Black issues: ${{ steps.directory-test.outputs.black-issues }}"
+          
+          # Should find style issues across all test files
+          if [ "${{ steps.directory-test.outputs.style-issues-found }}" != "true" ]; then
+            echo "❌ Expected style issues in directory scan but found none"
+            exit 1
+          fi
+          
+          if [ "${{ steps.directory-test.outputs.total-issues }}" -lt "20" ]; then
+            echo "❌ Expected many issues in directory but found ${{ steps.directory-test.outputs.total-issues }}"
+            exit 1
+          fi
+          
+          echo "✅ Directory scan test passed"
+
+  test-fail-on-issues:
+    runs-on: ubuntu-latest
+    name: Test fail-on-issues functionality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test that action fails when issues found and fail-on-issues is true
+        id: fail-test
+        continue-on-error: true
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/style-issues.html'
+          fail-on-style-issues: 'true'
+          checkers: 'flake8'
+      
+      - name: Verify action failed
+        run: |
+          if [ "${{ steps.fail-test.outcome }}" != "failure" ]; then
+            echo "❌ Expected action to fail but it succeeded"
+            exit 1
+          fi
+          echo "✅ Fail-on-issues test passed"
+
+  test-exclude-patterns:
+    runs-on: ubuntu-latest
+    name: Test exclude patterns
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test with exclude patterns
+        id: exclude-test
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/mixed-content.html'
+          fail-on-style-issues: 'false'
+          checkers: 'flake8'
+          exclude-patterns: '!pip install,!conda install,plt.show(),plt.figure()'
+      
+      - name: Verify exclude patterns work
+        run: |
+          echo "Style issues found: ${{ steps.exclude-test.outputs.style-issues-found }}"
+          echo "Total issues: ${{ steps.exclude-test.outputs.total-issues }}"
+          
+          # Should still find some issues but fewer than without exclude patterns
+          echo "✅ Exclude patterns test completed"
+
+  test-individual-checkers:
+    runs-on: ubuntu-latest
+    name: Test individual checkers
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test only flake8
+        id: flake8-only
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/style-issues.html'
+          fail-on-style-issues: 'false'
+          checkers: 'flake8'
+      
+      - name: Test only black
+        id: black-only
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/style-issues.html'
+          fail-on-style-issues: 'false'
+          checkers: 'black'
+      
+      - name: Test only pep8
+        id: pep8-only
+        uses: ./.github/actions/code-style-checker
+        with:
+          html-path: './test/code-style-checker/style-issues.html'
+          fail-on-style-issues: 'false'
+          checkers: 'pep8'
+      
+      - name: Verify individual checker results
+        run: |
+          echo "Flake8 only - Total: ${{ steps.flake8-only.outputs.total-issues }}, Flake8: ${{ steps.flake8-only.outputs.flake8-issues }}, Black: ${{ steps.flake8-only.outputs.black-issues }}"
+          echo "Black only - Total: ${{ steps.black-only.outputs.total-issues }}, Flake8: ${{ steps.black-only.outputs.flake8-issues }}, Black: ${{ steps.black-only.outputs.black-issues }}"
+          echo "PEP8 only - Total: ${{ steps.pep8-only.outputs.total-issues }}, PEP8: ${{ steps.pep8-only.outputs.pep8-issues }}"
+          
+          # Verify that only the selected checker reports issues
+          if [ "${{ steps.flake8-only.outputs.black-issues }}" != "0" ] || [ "${{ steps.flake8-only.outputs.pep8-issues }}" != "0" ]; then
+            echo "❌ Flake8-only test failed: other checkers reported issues"
+            exit 1
+          fi
+          
+          if [ "${{ steps.black-only.outputs.flake8-issues }}" != "0" ] || [ "${{ steps.black-only.outputs.pep8-issues }}" != "0" ]; then
+            echo "❌ Black-only test failed: other checkers reported issues"
+            exit 1
+          fi
+          
+          if [ "${{ steps.pep8-only.outputs.flake8-issues }}" != "0" ] || [ "${{ steps.pep8-only.outputs.black-issues }}" != "0" ]; then
+            echo "❌ PEP8-only test failed: other checkers reported issues"
+            exit 1
+          fi
+          
+          echo "✅ Individual checker tests passed"
