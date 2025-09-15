@@ -1,0 +1,303 @@
+name: Test Code Style Checker Action
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/actions/code-style-checker/**'
+      - 'test/code-style-checker/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/actions/code-style-checker/**'
+      - 'test/code-style-checker/**'
+  workflow_dispatch:
+
+jobs:
+  test-unformatted-files:
+    runs-on: ubuntu-latest
+    name: Test with unformatted Python code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create a copy of test files to work with
+          cp test/code-style-checker/unformatted-code.md /tmp/test-unformatted.md
+      
+      - name: Test action with unformatted code
+        id: unformatted-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/test-unformatted.md'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify unformatted results
+        run: |
+          echo "Files processed: ${{ steps.unformatted-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.unformatted-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.unformatted-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.unformatted-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.unformatted-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file processed but got ${{ steps.unformatted-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.unformatted-test.outputs.changes-made }}" != "true" ]; then
+            echo "❌ Expected changes to be made but none were made"
+            exit 1
+          fi
+          
+          if [ "${{ steps.unformatted-test.outputs.files-changed }}" != "1" ]; then
+            echo "❌ Expected 1 file changed but got ${{ steps.unformatted-test.outputs.files-changed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.unformatted-test.outputs.total-blocks-formatted }}" -lt "4" ]; then
+            echo "❌ Expected at least 4 blocks formatted but got ${{ steps.unformatted-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ Unformatted code test passed"
+
+  test-formatted-files:
+    runs-on: ubuntu-latest
+    name: Test with already formatted Python code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create a copy of test files to work with
+          cp test/code-style-checker/formatted-code.md /tmp/test-formatted.md
+      
+      - name: Test action with formatted code
+        id: formatted-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/test-formatted.md'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify formatted results
+        run: |
+          echo "Files processed: ${{ steps.formatted-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.formatted-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.formatted-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.formatted-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.formatted-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file processed but got ${{ steps.formatted-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.formatted-test.outputs.changes-made }}" != "false" ]; then
+            echo "❌ Expected no changes to be made but changes were made"
+            exit 1
+          fi
+          
+          if [ "${{ steps.formatted-test.outputs.files-changed }}" != "0" ]; then
+            echo "❌ Expected 0 files changed but got ${{ steps.formatted-test.outputs.files-changed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.formatted-test.outputs.total-blocks-formatted }}" != "0" ]; then
+            echo "❌ Expected 0 blocks formatted but got ${{ steps.formatted-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ Formatted code test passed"
+
+  test-no-python-files:
+    runs-on: ubuntu-latest
+    name: Test with non-Python code
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create a copy of test files to work with
+          cp test/code-style-checker/no-python-code.md /tmp/test-no-python.md
+      
+      - name: Test action with no Python code
+        id: no-python-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/test-no-python.md'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify no Python code results
+        run: |
+          echo "Files processed: ${{ steps.no-python-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.no-python-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.no-python-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.no-python-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.no-python-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file processed but got ${{ steps.no-python-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.no-python-test.outputs.changes-made }}" != "false" ]; then
+            echo "❌ Expected no changes to be made but changes were made"
+            exit 1
+          fi
+          
+          if [ "${{ steps.no-python-test.outputs.files-changed }}" != "0" ]; then
+            echo "❌ Expected 0 files changed but got ${{ steps.no-python-test.outputs.files-changed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.no-python-test.outputs.total-blocks-formatted }}" != "0" ]; then
+            echo "❌ Expected 0 blocks formatted but got ${{ steps.no-python-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ No Python code test passed"
+
+  test-myst-only:
+    runs-on: ubuntu-latest
+    name: Test MyST code-cell only processing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create a copy of test files to work with
+          cp test/code-style-checker/unformatted-code.md /tmp/test-myst-only.md
+      
+      - name: Test action with MyST only
+        id: myst-only-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/test-myst-only.md'
+          check-myst-code-cells: 'true'
+          check-markdown-blocks: 'false'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify MyST only results
+        run: |
+          echo "Files processed: ${{ steps.myst-only-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.myst-only-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.myst-only-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.myst-only-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.myst-only-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file processed but got ${{ steps.myst-only-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.myst-only-test.outputs.changes-made }}" != "true" ]; then
+            echo "❌ Expected changes to be made but none were made"
+            exit 1
+          fi
+          
+          # Should only format MyST blocks (3: python, python3, ipython3), not markdown blocks (2: python, ipython)
+          if [ "${{ steps.myst-only-test.outputs.total-blocks-formatted }}" != "3" ]; then
+            echo "❌ Expected exactly 3 MyST blocks formatted but got ${{ steps.myst-only-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ MyST only test passed"
+
+  test-markdown-only:
+    runs-on: ubuntu-latest
+    name: Test markdown blocks only processing
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create a copy of test files to work with
+          cp test/code-style-checker/unformatted-code.md /tmp/test-markdown-only.md
+      
+      - name: Test action with markdown blocks only
+        id: markdown-only-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/test-markdown-only.md'
+          check-myst-code-cells: 'false'
+          check-markdown-blocks: 'true'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify markdown only results
+        run: |
+          echo "Files processed: ${{ steps.markdown-only-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.markdown-only-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.markdown-only-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.markdown-only-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.markdown-only-test.outputs.files-processed }}" != "1" ]; then
+            echo "❌ Expected 1 file processed but got ${{ steps.markdown-only-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.markdown-only-test.outputs.changes-made }}" != "true" ]; then
+            echo "❌ Expected changes to be made but none were made"
+            exit 1
+          fi
+          
+          # Should only format markdown blocks (2: python, ipython), not MyST blocks (3: python, python3, ipython3)
+          if [ "${{ steps.markdown-only-test.outputs.total-blocks-formatted }}" != "2" ]; then
+            echo "❌ Expected exactly 2 markdown blocks formatted but got ${{ steps.markdown-only-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ Markdown only test passed"
+
+  test-multiple-files:
+    runs-on: ubuntu-latest
+    name: Test processing multiple files
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create copies of test files to work with
+          cp test/code-style-checker/unformatted-code.md /tmp/test-multi-1.md
+          cp test/code-style-checker/formatted-code.md /tmp/test-multi-2.md
+          cp test/code-style-checker/no-python-code.md /tmp/test-multi-3.md
+      
+      - name: Test action with multiple files
+        id: multi-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/test-multi-1.md,/tmp/test-multi-2.md,/tmp/test-multi-3.md'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify multiple files results
+        run: |
+          echo "Files processed: ${{ steps.multi-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.multi-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.multi-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.multi-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.multi-test.outputs.files-processed }}" != "3" ]; then
+            echo "❌ Expected 3 files processed but got ${{ steps.multi-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.multi-test.outputs.changes-made }}" != "true" ]; then
+            echo "❌ Expected changes to be made but none were made"
+            exit 1
+          fi
+          
+          # Only the first file (unformatted-code.md) should be changed
+          if [ "${{ steps.multi-test.outputs.files-changed }}" != "1" ]; then
+            echo "❌ Expected 1 file changed but got ${{ steps.multi-test.outputs.files-changed }}"
+            exit 1
+          fi
+          
+          # Should format 5 blocks from the unformatted file
+          if [ "${{ steps.multi-test.outputs.total-blocks-formatted }}" -lt "4" ]; then
+            echo "❌ Expected at least 4 blocks formatted but got ${{ steps.multi-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ Multiple files test passed"

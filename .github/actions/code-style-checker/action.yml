@@ -1,0 +1,345 @@
+name: 'Code Style Formatter'
+description: 'Format Python code in MyST markdown files and standard markdown code blocks using black'
+author: 'QuantEcon'
+
+inputs:
+  files:
+    description: 'Comma-separated list of markdown files to process'
+    required: true
+  check-myst-code-cells:
+    description: 'Enable searching for Python code in MyST code-cell directives'
+    required: false
+    default: 'true'
+  check-markdown-blocks:
+    description: 'Enable searching for Python code in standard markdown fenced code blocks'
+    required: false
+    default: 'true'
+  python-languages:
+    description: 'Comma-separated list of language identifiers to treat as Python code'
+    required: false
+    default: 'python,python3,ipython,ipython3'
+  black-args:
+    description: 'Additional arguments to pass to black'
+    required: false
+    default: '--line-length=88'
+  commit-files:
+    description: 'Whether to commit changes to individual files'
+    required: false
+    default: 'true'
+  git-user-name:
+    description: 'Git user name for commits'
+    required: false
+    default: 'GitHub Action'
+  git-user-email:
+    description: 'Git user email for commits'
+    required: false
+    default: 'action@github.com'
+
+outputs:
+  files-processed:
+    description: 'Number of files that were processed'
+    value: ${{ steps.format.outputs.files-processed }}
+  files-changed:
+    description: 'Number of files that had changes made'
+    value: ${{ steps.format.outputs.files-changed }}
+  total-blocks-formatted:
+    description: 'Total number of code blocks that were formatted'
+    value: ${{ steps.format.outputs.total-blocks-formatted }}
+  changes-made:
+    description: 'Whether any changes were made to files'
+    value: ${{ steps.format.outputs.changes-made }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Python environment
+      shell: bash
+      run: |
+        # Install black if not available
+        if ! python3 -c "import black" 2>/dev/null; then
+          echo "Installing black..."
+          python3 -m pip install black
+        else
+          echo "Black is already available"
+        fi
+
+    - name: Format Python code in markdown files
+      id: format
+      shell: bash
+      run: |
+        # Parse inputs
+        FILES="${{ inputs.files }}"
+        CHECK_MYST="${{ inputs.check-myst-code-cells }}"
+        CHECK_MARKDOWN="${{ inputs.check-markdown-blocks }}"
+        PYTHON_LANGS="${{ inputs.python-languages }}"
+        BLACK_ARGS="${{ inputs.black-args }}"
+        COMMIT_FILES="${{ inputs.commit-files }}"
+        GIT_USER_NAME="${{ inputs.git-user-name }}"
+        GIT_USER_EMAIL="${{ inputs.git-user-email }}"
+        
+        echo "Processing files: $FILES"
+        echo "Check MyST code-cells: $CHECK_MYST"
+        echo "Check markdown blocks: $CHECK_MARKDOWN"
+        echo "Python languages: $PYTHON_LANGS"
+        echo "Black arguments: $BLACK_ARGS"
+        
+        # Convert comma-separated inputs to arrays
+        IFS=',' read -ra FILE_ARRAY <<< "$FILES"
+        IFS=',' read -ra LANG_ARRAY <<< "$PYTHON_LANGS"
+        
+        # Initialize counters
+        FILES_PROCESSED=0
+        FILES_CHANGED=0
+        TOTAL_BLOCKS_FORMATTED=0
+        CHANGES_MADE="false"
+        
+        # Configure git if committing
+        if [ "$COMMIT_FILES" = "true" ]; then
+          git config --local user.email "$GIT_USER_EMAIL"
+          git config --local user.name "$GIT_USER_NAME"
+        fi
+        
+        # Create Python script for processing markdown files
+        cat > /tmp/format_markdown.py << 'EOF'
+import re
+import sys
+import tempfile
+import subprocess
+import os
+from pathlib import Path
+
+def is_python_language(lang, python_langs):
+    """Check if language identifier represents Python code"""
+    return lang.lower().strip() in [l.lower().strip() for l in python_langs]
+
+def format_code_with_black(code, black_args):
+    """Format Python code using black"""
+    try:
+        # Create temporary file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+            f.write(code)
+            temp_file = f.name
+        
+        # Run black on the temporary file
+        cmd = ['python3', '-m', 'black'] + black_args.split() + [temp_file]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            # Read back the formatted code
+            with open(temp_file, 'r') as f:
+                formatted_code = f.read()
+            os.unlink(temp_file)
+            return formatted_code.rstrip() + '\n' if formatted_code.endswith('\n') else formatted_code
+        else:
+            print(f"Black formatting failed: {result.stderr}", file=sys.stderr)
+            os.unlink(temp_file)
+            return code
+    except Exception as e:
+        print(f"Error formatting code: {e}", file=sys.stderr)
+        return code
+
+def process_markdown_file(file_path, check_myst, check_markdown, python_langs, black_args):
+    """Process a markdown file and format Python code blocks"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        original_content = content
+        blocks_formatted = 0
+        
+        # Process standard markdown fenced code blocks first if enabled
+        if check_markdown:
+            # Simple line-by-line approach that works reliably
+            lines = content.split('\n')
+            new_lines = []
+            i = 0
+            
+            while i < len(lines):
+                line = lines[i]
+                
+                # Skip MyST code-cell blocks entirely if we encounter them
+                if line.startswith('```{code-cell}'):
+                    # Add the line and skip until we find the closing ```
+                    new_lines.append(line)
+                    i += 1
+                    while i < len(lines) and not lines[i].startswith('```'):
+                        new_lines.append(lines[i])
+                        i += 1
+                    # Add the closing ``` if found
+                    if i < len(lines):
+                        new_lines.append(lines[i])
+                    i += 1
+                    continue
+                
+                # Check if this line starts a standard code block
+                if line.startswith('```') and not line.startswith('```{code-cell}'):
+                    # Extract language
+                    lang = line[3:].strip()
+                    
+                    # Start collecting code block
+                    code_lines = []
+                    new_lines.append(line)  # Add the opening ```
+                    i += 1
+                    
+                    # Collect lines until we find the closing ```
+                    while i < len(lines) and not lines[i].startswith('```'):
+                        code_lines.append(lines[i])
+                        i += 1
+                    
+                    # If we found a closing ```, process the code
+                    if i < len(lines) and lines[i].startswith('```'):
+                        # Check if this is Python code
+                        if is_python_language(lang, python_langs):
+                            code = '\n'.join(code_lines)
+                            formatted_code = format_code_with_black(code, black_args)
+                            blocks_formatted += 1
+                            print(f"  Formatted markdown code block (language: {lang})")
+                            
+                            # Add the formatted code lines
+                            for formatted_line in formatted_code.split('\n'):
+                                if formatted_line or formatted_code.endswith('\n'):  # Include last line if original had newline
+                                    new_lines.append(formatted_line)
+                        else:
+                            if lang:
+                                print(f"  Skipping markdown code block with language: {lang} (not Python)")
+                            # Add the original code lines
+                            new_lines.extend(code_lines)
+                        
+                        # Add the closing ```
+                        new_lines.append(lines[i])
+                    else:
+                        # No closing ```, add the code lines as-is
+                        new_lines.extend(code_lines)
+                else:
+                    new_lines.append(line)
+                
+                i += 1
+            
+            content = '\n'.join(new_lines)
+        
+        # Process MyST code-cell directives after standard blocks if enabled
+        if check_myst:
+            # Pattern for MyST code-cell directives: ```{code-cell} lang\ncode\n```
+            pattern = r'```\{code-cell\}\s*([^\n]*)\n(.*?)\n```'
+            
+            def replace_myst_block(match):
+                nonlocal blocks_formatted
+                lang = match.group(1).strip()
+                code = match.group(2)
+                
+                if is_python_language(lang, python_langs):
+                    formatted_code = format_code_with_black(code, black_args)
+                    blocks_formatted += 1
+                    print(f"  Formatted MyST code-cell block (language: {lang})")
+                    return f'```{{code-cell}} {lang}\n{formatted_code}\n```'
+                else:
+                    if lang:
+                        print(f"  Skipping MyST code-cell block with language: {lang} (not Python)")
+                    return match.group(0)
+            
+            content = re.sub(pattern, replace_myst_block, content, flags=re.DOTALL)
+        
+        # Check if content changed
+        file_changed = content != original_content
+        
+        if file_changed:
+            # Write back the formatted content
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+        
+        return file_changed, blocks_formatted
+        
+    except Exception as e:
+        print(f"Error processing file {file_path}: {e}", file=sys.stderr)
+        return False, 0
+
+if __name__ == "__main__":
+    if len(sys.argv) < 6:
+        print("Usage: python3 format_markdown.py <file_path> <check_myst> <check_markdown> <python_langs> <black_args>")
+        sys.exit(1)
+    
+    file_path = sys.argv[1]
+    check_myst = sys.argv[2].lower() == 'true'
+    check_markdown = sys.argv[3].lower() == 'true'
+    python_langs = sys.argv[4].split(',')
+    black_args = sys.argv[5]
+    
+    file_changed, blocks_formatted = process_markdown_file(file_path, check_myst, check_markdown, python_langs, black_args)
+    
+    # Output results
+    print(f"CHANGED:{file_changed}")
+    print(f"BLOCKS:{blocks_formatted}")
+EOF
+        
+        # Process each file
+        for file in "${FILE_ARRAY[@]}"; do
+          # Remove leading/trailing whitespace
+          file=$(echo "$file" | xargs)
+          
+          if [ ! -f "$file" ]; then
+            echo "⚠️  File not found: $file"
+            continue
+          fi
+          
+          if [[ ! "$file" == *.md ]]; then
+            echo "⚠️  Skipping non-markdown file: $file"
+            continue
+          fi
+          
+          echo "📝 Processing file: $file"
+          FILES_PROCESSED=$((FILES_PROCESSED + 1))
+          
+          # Run the Python script
+          output=$(python3 /tmp/format_markdown.py "$file" "$CHECK_MYST" "$CHECK_MARKDOWN" "$PYTHON_LANGS" "$BLACK_ARGS")
+          
+          # Parse output
+          file_changed=$(echo "$output" | grep "^CHANGED:" | cut -d: -f2)
+          blocks_formatted=$(echo "$output" | grep "^BLOCKS:" | cut -d: -f2)
+          
+          if [ "$file_changed" = "True" ]; then
+            FILES_CHANGED=$((FILES_CHANGED + 1))
+            TOTAL_BLOCKS_FORMATTED=$((TOTAL_BLOCKS_FORMATTED + blocks_formatted))
+            CHANGES_MADE="true"
+            
+            echo "✅ Applied black formatting to $blocks_formatted code block(s) in $file"
+            
+            # Commit individual file if enabled
+            if [ "$COMMIT_FILES" = "true" ]; then
+              filename=$(basename "$file")
+              commit_msg="[${filename}] applying black changes to code"
+              
+              git add "$file"
+              if git diff --staged --quiet; then
+                echo "⚠️  No changes to commit for $file"
+              else
+                git commit -m "$commit_msg"
+                echo "📝 Committed changes for $file with message: $commit_msg"
+              fi
+            fi
+          else
+            echo "✅ No formatting changes needed for $file"
+          fi
+        done
+        
+        # Set outputs
+        echo "files-processed=$FILES_PROCESSED" >> $GITHUB_OUTPUT
+        echo "files-changed=$FILES_CHANGED" >> $GITHUB_OUTPUT
+        echo "total-blocks-formatted=$TOTAL_BLOCKS_FORMATTED" >> $GITHUB_OUTPUT
+        echo "changes-made=$CHANGES_MADE" >> $GITHUB_OUTPUT
+        
+        # Summary
+        echo ""
+        echo "📊 Summary:"
+        echo "  Files processed: $FILES_PROCESSED"
+        echo "  Files changed: $FILES_CHANGED"
+        echo "  Total code blocks formatted: $TOTAL_BLOCKS_FORMATTED"
+        
+        if [ "$CHANGES_MADE" = "true" ]; then
+          echo "✅ Code formatting completed with changes"
+        else
+          echo "✅ Code formatting completed - no changes needed"
+        fi
+
+branding:
+  icon: 'code'
+  color: 'blue'
