@@ -37,19 +37,32 @@ jobs:
         run: git push
 ```
 
+### Format All Markdown Files Using Glob Patterns
+
+```yaml
+- name: Format all lecture files
+  uses: QuantEcon/meta/.github/actions/code-style-checker@main
+  with:
+    files: 'lectures/**/*.md'
+
+- name: Format multiple directories
+  uses: QuantEcon/meta/.github/actions/code-style-checker@main
+  with:
+    files: 'lectures/**/*.md,examples/**/*.md,notebooks/**/*.md'
+```
+
 ### Format All Markdown Files
 
 ```yaml
-- name: Get all markdown files
-  id: get-files
-  run: |
-    files=$(find . -name "*.md" -type f | paste -sd "," -)
-    echo "files=$files" >> $GITHUB_OUTPUT
-
-- name: Format all markdown files
+- name: Get all markdown files using glob pattern
   uses: QuantEcon/meta/.github/actions/code-style-checker@main
   with:
-    files: ${{ steps.get-files.outputs.files }}
+    files: '**/*.md'
+
+- name: Format specific directories
+  uses: QuantEcon/meta/.github/actions/code-style-checker@main
+  with:
+    files: 'lectures/**/*.md,examples/**/*.md'
 ```
 
 ## Trigger on PR Comments

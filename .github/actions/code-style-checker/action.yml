@@ -4,7 +4,7 @@ author: 'QuantEcon'
 
 inputs:
   files:
-    description: 'Comma-separated list of markdown files to process'
+    description: 'Comma-separated list of markdown files to process or glob patterns (e.g., "lecture/**/*.md")'
     required: true
   check-myst-code-cells:
     description: 'Enable searching for Python code in MyST code-cell directives'
@@ -83,9 +83,45 @@ runs:
         echo "Python languages: $PYTHON_LANGS"
         echo "Black arguments: $BLACK_ARGS"
         
-        # Convert comma-separated inputs to arrays
-        IFS=',' read -ra FILE_ARRAY <<< "$FILES"
+        # Convert comma-separated inputs to arrays and expand glob patterns
+        IFS=',' read -ra FILE_INPUT_ARRAY <<< "$FILES"
         IFS=',' read -ra LANG_ARRAY <<< "$PYTHON_LANGS"
+        
+        # Expand glob patterns to actual file paths
+        FILE_ARRAY=()
+        for pattern in "${FILE_INPUT_ARRAY[@]}"; do
+          # Remove leading/trailing whitespace
+          pattern=$(echo "$pattern" | xargs)
+          
+          # Check if pattern contains glob characters
+          if [[ "$pattern" == *"*"* || "$pattern" == *"?"* || "$pattern" == *"["* ]]; then
+            echo "🔍 Expanding glob pattern: $pattern"
+            # Use bash glob expansion with nullglob to handle no matches
+            shopt -s nullglob
+            expanded_files=($pattern)
+            shopt -u nullglob
+            
+            if [ ${#expanded_files[@]} -eq 0 ]; then
+              echo "⚠️  No files found matching pattern: $pattern"
+            else
+              echo "   Found ${#expanded_files[@]} file(s) matching pattern"
+              for file in "${expanded_files[@]}"; do
+                # Only add markdown files
+                if [[ "$file" == *.md ]]; then
+                  FILE_ARRAY+=("$file")
+                  echo "   + $file"
+                else
+                  echo "   - Skipping non-markdown file: $file"
+                fi
+              done
+            fi
+          else
+            # Direct file path (original behavior)
+            FILE_ARRAY+=("$pattern")
+          fi
+        done
+        
+        echo "📂 Total files to process: ${#FILE_ARRAY[@]}"
         
         # Initialize counters
         FILES_PROCESSED=0
@@ -273,7 +309,12 @@ EOF
         
         # Process each file
         for file in "${FILE_ARRAY[@]}"; do
-          # Remove leading/trailing whitespace
+          # Skip empty entries
+          if [ -z "$file" ]; then
+            continue
+          fi
+          
+          # Remove leading/trailing whitespace (for explicit file paths)
           file=$(echo "$file" | xargs)
           
           if [ ! -f "$file" ]; then

@@ -301,3 +301,134 @@ jobs:
           fi
           
           echo "✅ Multiple files test passed"
+
+  test-glob-patterns:
+    runs-on: ubuntu-latest
+    name: Test glob pattern support
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create test directory structure
+          mkdir -p /tmp/glob-test/subdir
+          
+          # Create test files with Python code
+          cat > /tmp/glob-test/file1.md << 'EOF'
+# Test File 1
+```python
+def test_function(x,y):
+    return x+y
+```
+EOF
+          
+          cat > /tmp/glob-test/subdir/file2.md << 'EOF'
+# Test File 2  
+```{code-cell} python
+def another_function(a,b):
+    result=a+b
+    return result
+```
+EOF
+          
+          cat > /tmp/glob-test/not-markdown.txt << 'EOF'
+This is not a markdown file
+EOF
+      
+      - name: Test action with glob pattern
+        id: glob-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/glob-test/**/*.md'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify glob pattern results
+        run: |
+          echo "Files processed: ${{ steps.glob-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.glob-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.glob-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.glob-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.glob-test.outputs.files-processed }}" != "2" ]; then
+            echo "❌ Expected 2 files processed but got ${{ steps.glob-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.glob-test.outputs.changes-made }}" != "true" ]; then
+            echo "❌ Expected changes to be made but none were made"
+            exit 1
+          fi
+          
+          if [ "${{ steps.glob-test.outputs.files-changed }}" != "2" ]; then
+            echo "❌ Expected 2 files changed but got ${{ steps.glob-test.outputs.files-changed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.glob-test.outputs.total-blocks-formatted }}" != "2" ]; then
+            echo "❌ Expected 2 blocks formatted but got ${{ steps.glob-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ Glob pattern test passed"
+
+  test-mixed-input:
+    runs-on: ubuntu-latest
+    name: Test mixed glob patterns and explicit files
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup test environment
+        run: |
+          # Create test directory
+          mkdir -p /tmp/mixed-test
+          
+          # Create a test file with Python code
+          cat > /tmp/mixed-test/glob-file.md << 'EOF'
+# Glob File
+```python
+def glob_function(x,y):
+    return x+y
+```
+EOF
+          
+          # Use existing test file as explicit file
+          cp test/code-style-checker/unformatted-code.md /tmp/explicit-file.md
+      
+      - name: Test action with mixed input
+        id: mixed-test
+        uses: .//.github/actions/code-style-checker
+        with:
+          files: '/tmp/mixed-test/*.md,/tmp/explicit-file.md'
+          commit-files: 'false'  # Don't commit during tests
+      
+      - name: Verify mixed input results
+        run: |
+          echo "Files processed: ${{ steps.mixed-test.outputs.files-processed }}"
+          echo "Files changed: ${{ steps.mixed-test.outputs.files-changed }}"
+          echo "Blocks formatted: ${{ steps.mixed-test.outputs.total-blocks-formatted }}"
+          echo "Changes made: ${{ steps.mixed-test.outputs.changes-made }}"
+          
+          if [ "${{ steps.mixed-test.outputs.files-processed }}" != "2" ]; then
+            echo "❌ Expected 2 files processed but got ${{ steps.mixed-test.outputs.files-processed }}"
+            exit 1
+          fi
+          
+          if [ "${{ steps.mixed-test.outputs.changes-made }}" != "true" ]; then
+            echo "❌ Expected changes to be made but none were made"
+            exit 1
+          fi
+          
+          if [ "${{ steps.mixed-test.outputs.files-changed }}" != "2" ]; then
+            echo "❌ Expected 2 files changed but got ${{ steps.mixed-test.outputs.files-changed }}"
+            exit 1
+          fi
+          
+          # Should format 1 block from glob file + at least 4 from explicit file
+          if [ "${{ steps.mixed-test.outputs.total-blocks-formatted }}" -lt "5" ]; then
+            echo "❌ Expected at least 5 blocks formatted but got ${{ steps.mixed-test.outputs.total-blocks-formatted }}"
+            exit 1
+          fi
+          
+          echo "✅ Mixed input test passed"

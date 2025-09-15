@@ -20,7 +20,7 @@ A GitHub Action that automatically formats Python code in MyST markdown files an
 - name: Format Python code in markdown files
   uses: QuantEcon/meta/.github/actions/code-style-checker@main
   with:
-    files: 'lecture/aiyagari.md,lecture/mccall.md'
+    files: 'lecture/**/*.md'
     check-myst-code-cells: 'true'
     check-markdown-blocks: 'true'
     python-languages: 'python,python3,ipython,ipython3'
@@ -69,7 +69,7 @@ jobs:
 
 | Input | Description | Required | Default |
 |-------|-------------|----------|---------|
-| `files` | Comma-separated list of markdown files to process | ✅ | |
+| `files` | Comma-separated list of markdown files to process or glob patterns (e.g., `lecture/**/*.md`) | ✅ | |
 | `check-myst-code-cells` | Enable processing of MyST `{code-cell}` directives | ❌ | `true` |
 | `check-markdown-blocks` | Enable processing of standard markdown fenced code blocks | ❌ | `true` |
 | `python-languages` | Comma-separated list of language identifiers to treat as Python | ❌ | `python,python3,ipython,ipython3` |
@@ -143,14 +143,54 @@ The action will:
 5. **File Updates**: Replaces original code blocks with formatted versions
 6. **Git Operations**: Commits each modified file individually with descriptive commit messages
 
+## File Input Formats
+
+The `files` input accepts multiple formats:
+
+### Explicit File Paths
+Comma-separated list of specific file paths:
+```yaml
+files: 'lecture/aiyagari.md,lecture/mccall.md,examples/optimization.md'
+```
+
+### Glob Patterns
+Use shell glob patterns to match multiple files:
+```yaml
+# All markdown files in lecture directory and subdirectories
+files: 'lecture/**/*.md'
+
+# All markdown files in specific directories
+files: 'lecture/*.md,examples/*.md'
+
+# Mixed patterns and explicit files
+files: 'lecture/**/*.md,specific-file.md'
+```
+
+### Supported Glob Patterns
+- `*` - matches any characters (excluding path separators)
+- `**` - matches any characters including path separators (recursive)
+- `?` - matches any single character
+- `[abc]` - matches any character in the set
+- `[a-z]` - matches any character in the range
+
 ## Configuration Examples
+
+### Process All Files in Directory
+
+```yaml
+- uses: QuantEcon/meta/.github/actions/code-style-checker@main
+  with:
+    files: 'lecture/**/*.md'
+    check-myst-code-cells: 'true'
+    check-markdown-blocks: 'false'
+```
 
 ### Only Process MyST Code-Cells
 
 ```yaml
 - uses: QuantEcon/meta/.github/actions/code-style-checker@main
   with:
-    files: 'lecture/*.md'
+    files: 'lecture/**/*.md'
     check-myst-code-cells: 'true'
     check-markdown-blocks: 'false'
 ```
