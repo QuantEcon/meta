@@ -25,6 +25,29 @@ A GitHub Action that scans HTML files for Python warnings and optionally fails t
 
 See the [action documentation](./.github/actions/check-warnings/README.md) for detailed usage instructions and examples.
 
+### Code Style Formatter Action
+
+A GitHub Action that automatically formats Python code in MyST markdown files and standard markdown code blocks using black.
+
+**Location**: `.github/actions/code-style-checker`
+
+**Usage**:
+```yaml
+- name: Format Python code in markdown files
+  uses: QuantEcon/meta/.github/actions/code-style-checker@main
+  with:
+    files: 'lecture/aiyagari.md,lecture/mccall.md'
+    check-myst-code-cells: 'true'
+    check-markdown-blocks: 'true'
+    python-languages: 'python,python3,ipython,ipython3'
+    black-args: '--line-length=88'
+    commit-files: 'true'
+```
+
+**Use case**: Perfect for maintaining consistent Python code formatting in MyST Markdown/Jupyter Book projects. Can be triggered by PR comments using `@quantecon-code-style` for on-demand formatting of changed files.
+
+See the [action documentation](./.github/actions/code-style-checker/README.md) for detailed usage instructions and examples.
+
 ### AI-Powered Link Checker Action
 
 A GitHub Action that validates web links in HTML files with AI-powered suggestions for improvements. Designed to replace traditional link checkers like `lychee` with enhanced functionality.
