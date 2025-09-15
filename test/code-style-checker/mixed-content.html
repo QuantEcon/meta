@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page with Mixed Content</title>
+</head>
+<body>
+    <h1>Mixed Content - Python and Non-Python</h1>
+    
+    <p>This page has a mix of Python code and other content that should be ignored.</p>
+    
+    <div class="cell_input">
+        <pre><code class="language-python">
+# Good Python code that should be checked
+import quantecon as qe
+import numpy as np
+
+def utility_function(c, α=0.5, β=0.95):
+    """Utility function with Unicode parameters."""
+    return (c**(1-α) - 1) / (1-α) * β
+
+consumption = np.linspace(0.1, 10, 100)
+utility = utility_function(consumption)
+
+# Use modern timer
+with qe.Timer():
+    result = np.sum(utility)
+
+print(f"Total utility: {result:.4f}")
+        </code></pre>
+    </div>
+    
+    <div class="cell_output">
+        <pre>
+Total utility: 234.5678
+        </pre>
+    </div>
+    
+    <div class="markdown-cell">
+        <p>This is markdown content that should be ignored.</p>
+        <pre><code class="bash">
+# This is bash code, not Python
+ls -la
+cd /home/user
+wget https://example.com/file.txt
+        </code></pre>
+    </div>
+    
+    <div class="cell_input">
+        <pre><code class="language-python">
+# Installation commands that should be excluded
+!pip install quantecon
+!conda install matplotlib
+
+# But this should be checked
+import matplotlib.pyplot as plt
+
+def plot_function():
+    x = np.linspace(0,10,100)
+    y = np.sin(x)
+    plt.plot(x,y)  # Missing spaces around operators
+    plt.show()
+
+plot_function()
+        </code></pre>
+    </div>
+    
+    <div class="html-content">
+        <pre><code class="html">
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;HTML Example&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;p&gt;This is HTML and should be ignored&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+        </code></pre>
+    </div>
+    
+    <div class="math-content">
+        <pre>
+$$
+\begin{aligned}
+u(c) &= \frac{c^{1-\alpha} - 1}{1-\alpha} \\
+V(k) &= \max_{c,k'} u(c) + \beta V(k')
+\end{aligned}
+$$
+        </pre>
+    </div>
+</body>
+</html>

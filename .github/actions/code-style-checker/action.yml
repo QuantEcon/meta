@@ -1,0 +1,447 @@
+name: 'Code Style Checker'
+description: 'Check Python code style in HTML code-cell blocks using flake8, black, and pep8'
+author: 'QuantEcon'
+
+inputs:
+  html-path:
+    description: 'Path to directory containing HTML files to scan'
+    required: false
+    default: '.'
+  checkers:
+    description: 'Comma-separated list of style checkers to run (flake8, black, pep8)'
+    required: false
+    default: 'flake8,black,pep8'
+  max-line-length:
+    description: 'Maximum line length for style checks'
+    required: false
+    default: '88'
+  fail-on-style-issues:
+    description: 'Whether to fail the workflow if style issues are found'
+    required: false
+    default: 'true'
+  create-issue:
+    description: 'Whether to create a GitHub issue when style issues are found'
+    required: false
+    default: 'false'
+  issue-title:
+    description: 'Title for the GitHub issue when style issues are found'
+    required: false
+    default: 'Code Style Issues Found in Documentation'
+  create-artifact:
+    description: 'Whether to create a workflow artifact with the style report'
+    required: false
+    default: 'false'
+  artifact-name:
+    description: 'Name for the workflow artifact containing the style report'
+    required: false
+    default: 'code-style-report'
+  notify:
+    description: 'GitHub username(s) to assign to the created issue (comma-separated for multiple users)'
+    required: false
+    default: ''
+  exclude-patterns:
+    description: 'Comma-separated list of code patterns to exclude from checking (e.g., "!pip install", "plt.show()")'
+    required: false
+    default: '!pip install,!conda install,plt.show(),plt.figure(),# noqa'
+
+outputs:
+  style-issues-found:
+    description: 'Whether style issues were found (true/false)'
+    value: ${{ steps.check.outputs.style-issues-found }}
+  total-issues:
+    description: 'Total number of style issues found'
+    value: ${{ steps.check.outputs.total-issues }}
+  flake8-issues:
+    description: 'Number of flake8 issues found'
+    value: ${{ steps.check.outputs.flake8-issues }}
+  black-issues:
+    description: 'Number of black formatting issues found'
+    value: ${{ steps.check.outputs.black-issues }}
+  pep8-issues:
+    description: 'Number of pep8 issues found'
+    value: ${{ steps.check.outputs.pep8-issues }}
+  style-details:
+    description: 'Details of style issues found'
+    value: ${{ steps.check.outputs.style-details }}
+  issue-url:
+    description: 'URL of the created GitHub issue (if create-issue is enabled)'
+    value: ${{ steps.create-issue.outputs.issue-url }}
+  artifact-path:
+    description: 'Path to the created artifact file (if create-artifact is enabled)'
+    value: ${{ steps.create-artifact.outputs.artifact-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install dependencies
+      shell: bash
+      run: |
+        python3 -m pip install flake8 black pycodestyle beautifulsoup4 --quiet
+
+    - name: Check code style in HTML files
+      id: check
+      shell: bash
+      run: |
+        # Get the action directory
+        ACTION_DIR="${{ github.action_path }}"
+        
+        # Parse inputs
+        HTML_PATH="${{ inputs.html-path }}"
+        CHECKERS="${{ inputs.checkers }}"
+        MAX_LINE_LENGTH="${{ inputs.max-line-length }}"
+        FAIL_ON_ISSUES="${{ inputs.fail-on-style-issues }}"
+        EXCLUDE_PATTERNS="${{ inputs.exclude-patterns }}"
+        
+        echo "Scanning HTML files in: $HTML_PATH"
+        echo "Using checkers: $CHECKERS"
+        echo "Max line length: $MAX_LINE_LENGTH"
+        echo "Exclude patterns: $EXCLUDE_PATTERNS"
+        
+        # Initialize counters
+        TOTAL_ISSUES=0
+        FLAKE8_ISSUES=0
+        BLACK_ISSUES=0
+        PEP8_ISSUES=0
+        STYLE_ISSUES_FOUND="false"
+        STYLE_DETAILS=""
+        DETAILED_REPORT=""
+        
+        # Check if HTML path exists
+        if [ ! -e "$HTML_PATH" ]; then
+          echo "Error: HTML path '$HTML_PATH' does not exist"
+          exit 1
+        fi
+        
+        # Find all HTML files
+        if [ -f "$HTML_PATH" ]; then
+          # Single file
+          if [[ "$HTML_PATH" == *.html ]]; then
+            echo "Checking single HTML file: $HTML_PATH"
+            FILES=("$HTML_PATH")
+          else
+            echo "Error: '$HTML_PATH' is not an HTML file"
+            exit 1
+          fi
+        else
+          # Directory - find all HTML files
+          mapfile -d '' FILES < <(find "$HTML_PATH" -name "*.html" -type f -print0)
+        fi
+        
+        echo "Found ${#FILES[@]} HTML files to check"
+        
+        # Process each HTML file
+        for file in "${FILES[@]}"; do
+          if [ ! -f "$file" ]; then
+            continue
+          fi
+          
+          echo "Checking code style in: $file"
+          
+          # Run style checker and capture JSON output
+          result_json=$(python3 "$ACTION_DIR/style_checker.py" "$file" \
+            --checkers "$CHECKERS" \
+            --max-line-length "$MAX_LINE_LENGTH" \
+            --exclude-patterns "$EXCLUDE_PATTERNS" 2>/tmp/style_stderr.log)
+          
+          if [ $? -ne 0 ] || [ -z "$result_json" ]; then
+            echo "Warning: Failed to process $file"
+            cat /tmp/style_stderr.log >&2
+            continue
+          fi
+          
+          # Parse results and update counters
+          file_flake8=$(echo "$result_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data.get('flake8_issues', [])))")
+          file_black=$(echo "$result_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data.get('black_issues', [])))")
+          file_pep8=$(echo "$result_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data.get('pep8_issues', [])))")
+          total_codes=$(echo "$result_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data['total_code_blocks'])")
+          
+          file_total=$((file_flake8 + file_black + file_pep8))
+          
+          TOTAL_ISSUES=$((TOTAL_ISSUES + file_total))
+          FLAKE8_ISSUES=$((FLAKE8_ISSUES + file_flake8))
+          BLACK_ISSUES=$((BLACK_ISSUES + file_black))
+          PEP8_ISSUES=$((PEP8_ISSUES + file_pep8))
+          
+          if [ "$file_total" -gt 0 ]; then
+            STYLE_ISSUES_FOUND="true"
+            
+            # Extract detailed results for reporting
+            if [ "$file_flake8" -gt 0 ]; then
+              flake8_details=$(echo "$result_json" | python3 "$ACTION_DIR/format_style_results.py" flake8)
+              STYLE_DETAILS="$STYLE_DETAILS\n\n**$file** - $file_flake8 flake8 issue(s):\n$flake8_details"
+            fi
+            
+            if [ "$file_black" -gt 0 ]; then
+              black_details=$(echo "$result_json" | python3 "$ACTION_DIR/format_style_results.py" black)
+              STYLE_DETAILS="$STYLE_DETAILS\n\n**$file** - $file_black black formatting issue(s):\n$black_details"
+            fi
+            
+            if [ "$file_pep8" -gt 0 ]; then
+              pep8_details=$(echo "$result_json" | python3 "$ACTION_DIR/format_style_results.py" pep8)
+              STYLE_DETAILS="$STYLE_DETAILS\n\n**$file** - $file_pep8 pep8 issue(s):\n$pep8_details"
+            fi
+          fi
+          
+          echo "  Found $total_codes code blocks, $file_total total style issues (flake8: $file_flake8, black: $file_black, pep8: $file_pep8)"
+        done
+        
+        # Set outputs
+        echo "style-issues-found=$STYLE_ISSUES_FOUND" >> $GITHUB_OUTPUT
+        echo "total-issues=$TOTAL_ISSUES" >> $GITHUB_OUTPUT
+        echo "flake8-issues=$FLAKE8_ISSUES" >> $GITHUB_OUTPUT
+        echo "black-issues=$BLACK_ISSUES" >> $GITHUB_OUTPUT
+        echo "pep8-issues=$PEP8_ISSUES" >> $GITHUB_OUTPUT
+        echo "style-details<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$STYLE_DETAILS" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Create detailed report for artifacts/issues
+        DETAILED_REPORT="## Code Style Check Summary\n\n"
+        DETAILED_REPORT="$DETAILED_REPORT- **Total style issues**: $TOTAL_ISSUES\n"
+        DETAILED_REPORT="$DETAILED_REPORT- **Flake8 issues**: $FLAKE8_ISSUES\n"
+        DETAILED_REPORT="$DETAILED_REPORT- **Black formatting issues**: $BLACK_ISSUES\n"
+        DETAILED_REPORT="$DETAILED_REPORT- **PEP8 issues**: $PEP8_ISSUES\n\n"
+        
+        if [ "$TOTAL_ISSUES" -gt 0 ]; then
+          DETAILED_REPORT="$DETAILED_REPORT## Style Issues Found\n$STYLE_DETAILS\n\n"
+        fi
+        
+        echo "detailed-report<<EOF" >> $GITHUB_OUTPUT
+        echo -e "$DETAILED_REPORT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Summary
+        if [ "$STYLE_ISSUES_FOUND" = "true" ]; then
+          echo "❌ Found $TOTAL_ISSUES style issue(s) in HTML code blocks"
+          if [ "$FAIL_ON_ISSUES" = "true" ]; then
+            echo "::error::Found $TOTAL_ISSUES code style issue(s) in HTML files"
+          fi
+        else
+          echo "✅ No code style issues found"
+        fi
+
+    - name: Post PR comment with style report
+      if: inputs.fail-on-style-issues == 'true' && steps.check.outputs.style-issues-found == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const totalIssues = '${{ steps.check.outputs.total-issues }}';
+          const flake8Issues = '${{ steps.check.outputs.flake8-issues }}';
+          const blackIssues = '${{ steps.check.outputs.black-issues }}';
+          const pep8Issues = '${{ steps.check.outputs.pep8-issues }}';
+          const detailedReport = ${{ toJSON(steps.check.outputs.detailed-report) }};
+          
+          const body = [
+            '## 🎨 Code Style Check Results',
+            '',
+            '🚨 **' + totalIssues + ' code style issue(s)** were found in Python code blocks.',
+            '',
+            '**Issue Breakdown:**',
+            '- **Flake8**: ' + flake8Issues + ' issue(s)',
+            '- **Black**: ' + blackIssues + ' formatting issue(s)',
+            '- **PEP8**: ' + pep8Issues + ' issue(s)',
+            '',
+            '**Build Details:**',
+            '- **Workflow Run:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})',
+            '- **Commit:** ${{ github.sha }}',
+            '- **Date:** ' + new Date().toISOString(),
+            '',
+            '---',
+            '',
+            detailedReport,
+            '',
+            '---',
+            '',
+            '**Next Steps:**',
+            '1. Review the style issues listed above',
+            '2. Apply formatting and style fixes to the source code',
+            '3. Push the changes to update this PR',
+            '',
+            '📝 *This comment was automatically generated by the [Code Style Checker Action](https://github.com/QuantEcon/meta/.github/actions/code-style-checker).*'
+          ].join('\n');
+          
+          try {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+            console.log('Posted PR comment with code style results');
+          } catch (error) {
+            console.error('Failed to create PR comment:', error);
+            core.setFailed('Failed to create PR comment: ' + error.message);
+          }
+
+    - name: Fail workflow on style issues
+      if: inputs.fail-on-style-issues == 'true' && steps.check.outputs.style-issues-found == 'true'
+      shell: bash
+      run: |
+        echo "Failing workflow due to code style issues found"
+        exit 1
+
+    - name: Create artifact with style report
+      id: create-artifact
+      if: inputs.create-artifact == 'true' && steps.check.outputs.style-issues-found == 'true'
+      shell: bash
+      run: |
+        ARTIFACT_NAME="${{ inputs.artifact-name }}"
+        ARTIFACT_FILE="$ARTIFACT_NAME.md"
+        CURRENT_DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
+        
+        {
+          echo "# Code Style Report"
+          echo ""
+          echo "**Date:** $CURRENT_DATE"
+          echo "**Repository:** ${{ github.repository }}"
+          echo "**Workflow:** ${{ github.workflow }}"
+          echo "**Run ID:** ${{ github.run_id }}"
+          echo "**Total Issues Found:** ${{ steps.check.outputs.total-issues }}"
+          echo "**Flake8 Issues:** ${{ steps.check.outputs.flake8-issues }}"
+          echo "**Black Issues:** ${{ steps.check.outputs.black-issues }}"
+          echo "**PEP8 Issues:** ${{ steps.check.outputs.pep8-issues }}"
+          echo ""
+          echo "---"
+          echo ""
+          echo "${{ steps.check.outputs.detailed-report }}"
+          echo ""
+          echo "---"
+          echo ""
+          echo "Generated by [Code Style Checker Action](https://github.com/QuantEcon/meta/.github/actions/code-style-checker)"
+        } > "$ARTIFACT_FILE"
+        
+        echo "artifact-path=$ARTIFACT_FILE" >> $GITHUB_OUTPUT
+        echo "Created code style report artifact: $ARTIFACT_FILE"
+
+    - name: Upload style report artifact
+      if: inputs.create-artifact == 'true' && steps.check.outputs.style-issues-found == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.create-artifact.outputs.artifact-path }}
+        retention-days: 30
+
+    - name: Create GitHub issue
+      id: create-issue
+      if: inputs.create-issue == 'true' && steps.check.outputs.style-issues-found == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const totalIssues = '${{ steps.check.outputs.total-issues }}';
+          const flake8Issues = '${{ steps.check.outputs.flake8-issues }}';
+          const blackIssues = '${{ steps.check.outputs.black-issues }}';
+          const pep8Issues = '${{ steps.check.outputs.pep8-issues }}';
+          const detailedReport = ${{ toJSON(steps.check.outputs.detailed-report) }};
+          const title = '${{ inputs.issue-title }}';
+          const notify = '${{ inputs.notify }}';
+          
+          const body = [
+            '# Code Style Issues Report',
+            '',
+            '🚨 **' + totalIssues + ' code style issue(s)** were found in Python code blocks within the documentation.',
+            '',
+            '**Issue Breakdown:**',
+            '- **Flake8**: ' + flake8Issues + ' issue(s)',
+            '- **Black**: ' + blackIssues + ' formatting issue(s)',
+            '- **PEP8**: ' + pep8Issues + ' issue(s)',
+            '',
+            '**Details:**',
+            '- **Repository:** ${{ github.repository }}',
+            '- **Workflow:** ${{ github.workflow }}',
+            '- **Run ID:** [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})',
+            '- **Commit:** ${{ github.sha }}',
+            '- **Branch:** ${{ github.ref_name }}',
+            '- **Date:** ' + new Date().toISOString(),
+            '',
+            '---',
+            '',
+            detailedReport,
+            '',
+            '---',
+            '',
+            '**Next Steps:**',
+            '1. Review the style issues listed above',
+            '2. Apply formatting and style fixes to the source code',
+            '3. Re-run the build to verify the issues are resolved',
+            '',
+            '**Note:** This issue was automatically created by the [Code Style Checker Action](https://github.com/QuantEcon/meta/.github/actions/code-style-checker).',
+            '',
+            'Please close this issue once all style issues have been addressed.'
+          ].join('\n');
+          
+          try {
+            const response = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              body: body,
+              labels: ['enhancement', 'code-style', 'python']
+            });
+            
+            const issueUrl = response.data.html_url;
+            const issueNumber = response.data.number;
+            console.log('Created issue: ' + issueUrl);
+            core.setOutput('issue-url', issueUrl);
+            
+            // Assign users to the issue if notify parameter is provided
+            if (notify && notify.trim()) {
+              try {
+                const assignees = notify.split(',')
+                  .map(username => username.trim())
+                  .filter(username => username.length > 0);
+                
+                if (assignees.length > 0) {
+                  console.log('Assigning issue to users: ' + assignees.join(', '));
+                  
+                  await github.rest.issues.addAssignees({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNumber,
+                    assignees: assignees
+                  });
+                  
+                  console.log('Successfully assigned issue to: ' + assignees.join(', '));
+                }
+              } catch (assignError) {
+                console.error('Failed to assign users to issue:', assignError);
+                console.log('Issue was created successfully, but assignment failed.');
+              }
+            }
+            
+            return issueUrl;
+          } catch (error) {
+            console.error('Failed to create issue:', error);
+            core.setFailed('Failed to create issue: ' + error.message);
+          }
+
+    - name: Post simple PR comment linking to issue
+      if: inputs.create-issue == 'true' && steps.check.outputs.style-issues-found == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const issueUrl = '${{ steps.create-issue.outputs.issue-url }}';
+          
+          const body = [
+            '🎨 Code style issues were found in Python code blocks.',
+            '',
+            `For detailed analysis and recommendations, please check ${issueUrl}`,
+            '',
+            'Note: This issue was automatically created by the [Code Style Checker Action](https://github.com/QuantEcon/meta/.github/actions/code-style-checker).'
+          ].join('\n');
+          
+          try {
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+            console.log('Posted simple PR comment linking to issue');
+          } catch (error) {
+            console.error('Failed to create PR comment:', error);
+            core.setFailed('Failed to create PR comment: ' + error.message);
+          }
+
+branding:
+  icon: 'code'
+  color: 'purple'

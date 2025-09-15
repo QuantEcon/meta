@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Page with Style Issues</title>
+</head>
+<body>
+    <h1>Code with Style Problems</h1>
+    
+    <div class="cell_input">
+        <pre><code class="language-python">
+# This code has multiple style issues
+import numpy as np,pandas as pd
+import matplotlib.pyplot as plt
+
+def bad_function(x,y,z):
+    # Too many arguments on one line, bad spacing
+    result=x+y+z
+    if result>10:
+        print("Result is big")
+    else:
+        print("Result is small")
+    return result
+
+# Long line that exceeds 88 characters and has poor formatting practices
+very_long_variable_name_that_is_unnecessarily_verbose = bad_function(1,2,3) + bad_function(4,5,6) + bad_function(7,8,9)
+
+# Missing spaces around operators
+a=1+2*3
+b=a**2
+c=b//2
+
+# Poor list formatting
+my_list=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+
+print(very_long_variable_name_that_is_unnecessarily_verbose)
+        </code></pre>
+    </div>
+    
+    <div class="code-cell">
+        <pre><code>
+# Another block with issues
+def another_bad_function( x, y ):
+    """Bad spacing in function definition"""
+    z=x+y
+    if z==0:
+        return None
+    elif z<0:
+        return "negative"
+    else:
+        return "positive"
+
+# Inconsistent quotes and spacing
+name="John"
+age=25
+message='Hello, '+name+' you are '+str(age)+' years old'
+
+# Bad dictionary formatting
+person={'name':name,'age':age,'location':'New York','occupation':'Engineer'}
+
+print(message)
+print(person)
+        </code></pre>
+    </div>
+</body>
+</html>
