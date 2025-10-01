@@ -17,12 +17,9 @@ jobs:
     name: Generate Weekly Report
     
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
       - name: Generate weekly report
         id: report
-        uses: .//.github/actions/weekly-report
+        uses: QuantEcon/action-weekly-report@main
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           organization: 'QuantEcon'
