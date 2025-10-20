@@ -24,7 +24,7 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           organization: 'QuantEcon'
           output-format: 'markdown'
-          exclude-repos: 'lecture-python.notebooks'
+          exclude-repos: 'lecture-.*\.notebooks,test-.*'
       
       - name: Create issue with report
         uses: actions/github-script@v7
