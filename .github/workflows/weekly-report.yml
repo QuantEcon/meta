@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Generate weekly report
         id: report
-        uses: QuantEcon/action-weekly-report@main
+        uses: QuantEcon/action-weekly-report@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           organization: 'QuantEcon'
