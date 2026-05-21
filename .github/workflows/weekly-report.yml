@@ -79,27 +79,46 @@ jobs:
             //     the report isn't lost even if the comment can't be posted)
             const COMMENT_BODY_LIMIT = 65536;
             if (fs.existsSync('highlights.md')) {
-              let highlights = fs.readFileSync('highlights.md', 'utf8');
-              const originalLen = highlights.length;
-              if (highlights.length > COMMENT_BODY_LIMIT) {
-                const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-                const footer = `\n\n---\n\n_Highlights truncated to fit GitHub's 65,536-char comment limit. Full content available in the workflow artifact: [weekly-report (run #${context.runId})](${runUrl})._\n`;
-                highlights = highlights.slice(0, COMMENT_BODY_LIMIT - footer.length) + footer;
-                console.log(`Truncated highlights from ${originalLen} to ${highlights.length} chars`);
-              }
+              // Read + truncate inside its own try/catch — existsSync doesn't
+              // guarantee the read succeeds (permissions, IO), and we want any
+              // such failure to behave like "file not produced" rather than
+              // crash the workflow.
+              let highlights;
               try {
-                await github.rest.issues.createComment({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.data.number,
-                  body: highlights,
-                });
-                console.log(`Posted highlights.md (${highlights.length} chars) as first comment`);
-              } catch (err) {
-                // Don't fail the run — the issue is created and the artifact is
-                // uploaded, so the highlights are recoverable manually.
-                console.error(`Failed to post highlights comment on issue #${issue.data.number}: ${err.message}`);
-                console.error('The report issue was still created. highlights.md is available in the workflow artifact.');
+                highlights = fs.readFileSync('highlights.md', 'utf8');
+              } catch (readErr) {
+                console.error(`Failed to read highlights.md: ${readErr.message || readErr}`);
+                console.error('Skipping highlights comment. The report issue was still created.');
+                highlights = null;
+              }
+              if (highlights !== null) {
+                const originalLen = highlights.length;
+                if (highlights.length > COMMENT_BODY_LIMIT) {
+                  const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+                  const footer = `\n\n---\n\n_Highlights truncated to fit GitHub's 65,536-char comment limit. Full content available in the workflow artifact: [weekly-report (run #${context.runId})](${runUrl})._\n`;
+                  highlights = highlights.slice(0, COMMENT_BODY_LIMIT - footer.length) + footer;
+                  console.log(`Truncated highlights from ${originalLen} to ${highlights.length} chars`);
+                }
+                try {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issue.data.number,
+                    body: highlights,
+                  });
+                  console.log(`Posted highlights.md (${highlights.length} chars) as first comment`);
+                } catch (err) {
+                  // Don't fail the run — the issue is created and the artifact is
+                  // uploaded, so the highlights are recoverable manually.
+                  // Octokit errors carry status + response.data; log them so
+                  // future debugging isn't limited to err.message (which is
+                  // often terse, e.g. "Validation Failed").
+                  const status = err.status ? ` [HTTP ${err.status}]` : '';
+                  const message = err.message || String(err);
+                  const responseDetail = err.response?.data ? ` response=${JSON.stringify(err.response.data)}` : '';
+                  console.error(`Failed to post highlights comment on issue #${issue.data.number}${status}: ${message}${responseDetail}`);
+                  console.error('The report issue was still created. highlights.md is available in the workflow artifact.');
+                }
               }
             } else {
               console.log('highlights.md not produced — skipping highlights comment');
