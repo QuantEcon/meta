@@ -70,15 +70,37 @@ jobs:
 
             // Post the curated highlights as the first comment, if produced.
             // The action emits highlights.md when `highlights: true` is set above.
+            //
+            // Hardened against:
+            //   - GitHub's 65,536-char comment body limit (truncate with a pointer
+            //     to the uploaded artifact)
+            //   - transient API failures (log + continue rather than fail the
+            //     workflow — the issue itself has already been created above, so
+            //     the report isn't lost even if the comment can't be posted)
+            const COMMENT_BODY_LIMIT = 65536;
             if (fs.existsSync('highlights.md')) {
-              const highlights = fs.readFileSync('highlights.md', 'utf8');
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.data.number,
-                body: highlights,
-              });
-              console.log(`Posted highlights.md (${highlights.length} chars) as first comment`);
+              let highlights = fs.readFileSync('highlights.md', 'utf8');
+              const originalLen = highlights.length;
+              if (highlights.length > COMMENT_BODY_LIMIT) {
+                const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+                const footer = `\n\n---\n\n_Highlights truncated to fit GitHub's 65,536-char comment limit. Full content available in the workflow artifact: [weekly-report (run #${context.runId})](${runUrl})._\n`;
+                highlights = highlights.slice(0, COMMENT_BODY_LIMIT - footer.length) + footer;
+                console.log(`Truncated highlights from ${originalLen} to ${highlights.length} chars`);
+              }
+              try {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issue.data.number,
+                  body: highlights,
+                });
+                console.log(`Posted highlights.md (${highlights.length} chars) as first comment`);
+              } catch (err) {
+                // Don't fail the run — the issue is created and the artifact is
+                // uploaded, so the highlights are recoverable manually.
+                console.error(`Failed to post highlights comment on issue #${issue.data.number}: ${err.message}`);
+                console.error('The report issue was still created. highlights.md is available in the workflow artifact.');
+              }
             } else {
               console.log('highlights.md not produced — skipping highlights comment');
             }
