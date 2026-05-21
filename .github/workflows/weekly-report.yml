@@ -15,7 +15,7 @@ jobs:
   generate-report:
     runs-on: ubuntu-latest
     name: Generate Weekly Report
-    
+
     steps:
       - name: Generate weekly report
         id: report
@@ -23,50 +23,75 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           organization: 'QuantEcon'
-          output-format: 'markdown'
           exclude-repos: 'lecture-.*\.notebooks,test-.*'
           track-external-repos: 'executablebooks/sphinx-exercise,executablebooks/sphinx-proof'
-      
-      - name: Create issue with report
+          highlights: 'true'
+          llm-summary: 'true'
+        env:
+          # Used by --llm-summary to draft 1-sentence theme narratives via Claude.
+          # If the secret is missing the step warns and still produces highlights
+          # without narratives (see action-weekly-report docs/highlights.md).
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Create issue with report and post highlights as first comment
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            
-            // Read the report content directly from the generated file
+
+            // Read the main report content
             let reportContent = '';
             try {
               reportContent = fs.readFileSync('weekly-report.md', 'utf8');
-              console.log(`Successfully read report file, length: ${reportContent.length}`);
+              console.log(`Read weekly-report.md (${reportContent.length} chars)`);
             } catch (error) {
               console.error('Failed to read weekly-report.md:', error);
               reportContent = 'Error: Unable to load weekly report content.';
             }
-            
-            // Create issue title with current date
+
+            // Build the issue title
             const now = new Date();
-            const weekEnding = now.toLocaleDateString('en-US', { 
-              year: 'numeric', 
-              month: 'long', 
-              day: 'numeric' 
+            const weekEnding = now.toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric'
             });
             const title = `Weekly Report - Week Ending ${weekEnding}`;
-            
+
             // Create the issue
-            await github.rest.issues.create({
+            const issue = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: title,
               body: reportContent,
               labels: ['weekly-report', 'automated']
             });
-            
-            console.log(`Created issue: ${title}`);
-            console.log(`Report content length: ${reportContent.length}`);
-      
-      - name: Upload report as artifact
+            console.log(`Created issue #${issue.data.number}: ${title}`);
+
+            // Post the curated highlights as the first comment, if produced.
+            // The action emits highlights.md when `highlights: true` is set above.
+            if (fs.existsSync('highlights.md')) {
+              const highlights = fs.readFileSync('highlights.md', 'utf8');
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.data.number,
+                body: highlights,
+              });
+              console.log(`Posted highlights.md (${highlights.length} chars) as first comment`);
+            } else {
+              console.log('highlights.md not produced — skipping highlights comment');
+            }
+
+      - name: Upload report artifacts
         uses: actions/upload-artifact@v4
         with:
           name: weekly-report
-          path: weekly-report.md
+          # Bundle every artifact the action produces so we can re-run
+          # tools/highlights.py against weekly-report-data.json offline if we
+          # ever want to retune themes or compare LLM models.
+          path: |
+            weekly-report.md
+            weekly-report-data.json
+            highlights.md
           retention-days: 90
