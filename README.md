@@ -41,20 +41,19 @@ A GitHub Action that validates web links in HTML files with AI-powered suggestio
 
 **Use case**: Perfect for MyST Markdown/Jupyter Book projects. Provides weekly scheduled scans and PR-specific validation with AI suggestions for broken or outdated links.
 
-### Weekly Report Action
+### Activity Reporting Action
 
-A GitHub Action that generates a weekly report summarizing issues and PR activity across all QuantEcon repositories.
+A GitHub Action that generates activity reports summarizing issues, PRs, commits, and releases across QuantEcon repositories over any date range.
 
-**Repository**: [QuantEcon/action-weekly-report](https://github.com/QuantEcon/action-weekly-report)
+**Repository**: [QuantEcon/action-reporting](https://github.com/QuantEcon/action-reporting)
 
 **Usage**:
 ```yaml
-- name: Generate weekly report
-  uses: QuantEcon/action-weekly-report@main
+- name: Generate activity report
+  uses: QuantEcon/action-reporting@v2
   with:
     github-token: ${{ secrets.GITHUB_TOKEN }}
     organization: 'QuantEcon'
-    output-format: 'markdown'
 ```
 
-**Use case**: Automated weekly reporting on repository activity including opened/closed issues and merged PRs. Runs automatically every Saturday and creates an issue with the report.
+**Use case**: Automated reporting on repository activity (opened/closed issues, opened/merged PRs, releases, commits). The recurring **weekly status report now runs in the [action-reporting](https://github.com/QuantEcon/action-reporting) repo itself** and records each report as an issue there (filter by the `status-report` label) — it no longer runs from this repo.
